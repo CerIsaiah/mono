@@ -1,28 +1,23 @@
+// apps/api/src/index.ts
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import openaiRouter from '../routes/openai';
 
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 4000;
+const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
 
-// Add a root route handler
 app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to Smoothrizz API' });
+    res.json({ message: 'Welcome to Smoothrizz API' });
 });
+// Mount your OpenAI API route
+app.use('/api', openaiRouter);
 
-// Health check route
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, platform: 'Smoothrizz API' });
-});
-
-// Add more routes here
-// app.use('/api/your-route', yourRouteHandler);
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ API running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`✅ API running on port ${PORT}`);
 });
