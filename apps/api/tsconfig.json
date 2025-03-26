@@ -9,7 +9,7 @@
       "forceConsistentCasingInFileNames": true,
       "skipLibCheck": true
     },
-    "include": ["src/**/*", "src/routes/**/*"],
+    "include": ["src/**/*", "src/routes/**/*", "index.ts"],
     "exclude": ["node_modules"]
 }
   
