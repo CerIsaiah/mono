@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 
 dotenv.config();
 

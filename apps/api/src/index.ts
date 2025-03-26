@@ -5,6 +5,9 @@ import openaiRouter from './routes/openai';  // Update this path
 
 dotenv.config();
 
+// Add this line to debug
+console.log('OpenAI API Key exists:', !!process.env.OPENAI_API_KEY);
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 

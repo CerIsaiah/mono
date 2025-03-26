@@ -44,7 +44,7 @@ export default function Home() {
       }
 
       // Use the full URL without the /api prefix since it's already in your Express route
-      const response = await fetch(`https://${process.env.NEXT_PUBLIC_BASE_URL}/openai`, {
+      const response = await fetch(`https://${process.env.NEXT_PUBLIC_BASE_URL}/api/openai`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
