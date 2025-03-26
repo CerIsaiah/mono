@@ -24,26 +24,32 @@ export default function Home() {
       let requestBody = {};
       
       if (inputType === 'text') {
+        if (!context || !lastText) {
+          throw new Error('Please provide both context and last message');
+        }
         requestBody = {
           context,
           lastText,
           mode: 'first-move'
         };
       } else {
+        if (!image) {
+          throw new Error('Please select an image');
+        }
         // Convert image to base64
-        const reader = new FileReader();
-        reader.readAsDataURL(image);
+        const base64Image = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(image);
+        });
         
-        reader.onload = async () => {
-          const base64Image = reader.result.split(',')[1];
-          requestBody = {
-            imageBase64: base64Image,
-            mode: 'first-move'
-          };
+        requestBody = {
+          imageBase64: base64Image,
+          mode: 'first-move'
         };
       }
 
-      // Use the full URL without the /api prefix since it's already in your Express route
       const response = await fetch(`https://${process.env.NEXT_PUBLIC_BASE_URL}/api/openai`, {
         method: 'POST',
         headers: {
