@@ -19,5 +19,5 @@ app.get('/api/health', (req, res) => {
 // app.use('/api/your-route', yourRouteHandler);
 
 app.listen(PORT, () => {
-  console.log(`✅ API running at http://localhost:${PORT}`);
+    console.log(`✅ API running on port ${PORT}`);
 });
