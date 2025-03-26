@@ -127,7 +127,17 @@ export default function Home() {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => setImage(e.target.files[0])}
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file && file.size > 50 * 1024 * 1024) { // 50MB in bytes
+                  setError('Image size must be less than 50MB');
+                  e.target.value = ''; // Clear the input
+                  setImage(null);
+                  return;
+                }
+                setImage(file);
+                setError('');
+              }}
               className="w-full"
             />
           </div>
