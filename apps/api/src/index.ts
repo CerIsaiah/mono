@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Configure dotenv with explicit path and debug logging
-const envPath = path.resolve(__dirname, '../.env');
+// Load .env from apps/api/.env
+const envPath = path.resolve(process.cwd(), 'apps/api/.env');
 const result = dotenv.config({ path: envPath });
 
 if (result.error) {
