@@ -2,35 +2,73 @@ import express, { Request, Response, Router, RequestHandler } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { findOrCreateUser, getIPUsage } from '../db/dbOperations';
 import { GoogleAuthPayload, GoogleAuthResponse } from '../types/auth';
+import path from 'path';
 
 const router: Router = express.Router();
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Initialize OAuth client with validation
+function initializeOAuthClient(): OAuth2Client | null {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  
+  if (!clientId) {
+    // Try to load from .env file directly as fallback
+    try {
+      require('dotenv').config({ 
+        path: path.resolve(__dirname, '../../.env') 
+      });
+    } catch (error) {
+      console.error('Failed to load .env file:', error);
+    }
+  }
+
+  // Final check for client ID
+  const finalClientId = process.env.GOOGLE_CLIENT_ID;
+  if (!finalClientId) {
+    console.error('Google Client ID is missing. Authentication will fail.');
+    return null;
+  }
+
+  return new OAuth2Client(finalClientId);
+}
+
+let oauthClient: OAuth2Client | null = initializeOAuthClient();
 
 // Type for request with IP
 interface RequestWithIP extends Request {
   ip: string;
 }
 
-// Get Google Client ID
+// Get Google Client ID with enhanced error handling
 const getGoogleClientId: RequestHandler = (req: Request, res: Response) => {
   console.log('Received request for Google Client ID:', {
     timestamp: new Date().toISOString(),
     headers: req.headers,
-    ip: req.ip
+    ip: req.ip,
+    nodeEnv: process.env.NODE_ENV
   });
+
+  // Try to reinitialize client if not available
+  if (!oauthClient) {
+    oauthClient = initializeOAuthClient();
+  }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   
   console.log('Debug - Google Client ID Check:', {
     exists: !!clientId,
     timestamp: new Date().toISOString(),
-    envVars: Object.keys(process.env).filter(key => key.includes('GOOGLE'))
+    envVars: Object.keys(process.env).filter(key => key.includes('GOOGLE')),
+    envPath: path.resolve(__dirname, '../../.env')
   });
 
-  if (!clientId) {
+  if (!clientId || !oauthClient) {
     console.error('Google Client ID missing:', {
       timestamp: new Date().toISOString(),
-      envVars: Object.keys(process.env).filter(key => key.includes('GOOGLE'))
+      envVars: Object.keys(process.env).filter(key => key.includes('GOOGLE')),
+      searchPaths: [
+        path.resolve(__dirname, '../../.env'),
+        path.resolve(process.cwd(), '.env')
+      ]
     });
     return res.status(500).json({ 
       error: 'Google Client ID not configured',
@@ -44,6 +82,10 @@ const getGoogleClientId: RequestHandler = (req: Request, res: Response) => {
 
 // Handle Google Authentication
 const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = async (req, res) => {
+  if (!oauthClient) {
+    return res.status(500).json({ error: 'OAuth client not initialized' });
+  }
+
   console.log('Received Google auth request:', {
     timestamp: new Date().toISOString(),
     ip: req.ip,
@@ -61,7 +103,7 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
 
     // Verify the Google token
     console.log('Verifying Google token...');
-    const ticket = await client.verifyIdToken({
+    const ticket = await oauthClient.verifyIdToken({
       idToken: credential,
       audience: process.env.GOOGLE_CLIENT_ID,
     });

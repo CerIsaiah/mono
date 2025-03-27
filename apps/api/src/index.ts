@@ -1,5 +1,23 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+// Configure dotenv with explicit path and debug logging
+const envPath = path.resolve(__dirname, '../.env');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.error('Error loading .env file:', {
+    error: result.error.message,
+    searchPath: envPath,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Log all available environment variables (excluding sensitive values)
+console.log('Available environment variables:', {
+  timestamp: new Date().toISOString(),
+  vars: Object.keys(process.env).filter(key => !key.includes('KEY') && !key.includes('SECRET'))
+});
 
 import express from 'express';
 import cors from 'cors';
