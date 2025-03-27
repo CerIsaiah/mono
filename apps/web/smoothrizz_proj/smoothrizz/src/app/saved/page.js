@@ -203,14 +203,55 @@ export default function SavedResponses() {
     localStorage.removeItem('smoothrizz_user');
     setUser(null);
     
-    // Reload Google Sign-In script
+    // Remove existing Google Sign-In script if present
+    const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existingScript) {
+      existingScript.remove();
+    }
+    
+    // Add new script with proper initialization
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
-    script.defer = true;
+    script.onload = () => {
+      window.google.accounts.id.initialize({
+        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse,
+        auto_select: false
+      });
+      
+      // Render the button
+      window.google.accounts.id.renderButton(
+        document.getElementById('googleSignInButton'),
+        { theme: 'outline', size: 'large' }
+      );
+    };
     document.body.appendChild(script);
     
     router.push('/');
+  };
+
+  // Add the credential response handler if not already present
+  const handleCredentialResponse = async (response) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ credential: response.credential }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setUser(data.user);
+        localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
+      } else {
+        console.error('Sign-in failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Error during sign-in:', error);
+    }
   };
 
   const handleCheckout = async () => {
@@ -510,21 +551,7 @@ export default function SavedResponses() {
             </div>
             {!user && (
               <div id="googleSignInButton" className="flex items-center">
-                <div id="g_id_onload"
-                  data-client_id={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
-                  data-context="signin"
-                  data-ux_mode="popup"
-                  data-callback="handleCredentialResponse"
-                  data-auto_prompt="false">
-                </div>
-                <div className="g_id_signin"
-                  data-type="standard"
-                  data-shape="rectangular"
-                  data-theme="outline"
-                  data-text="signin_with"
-                  data-size="large"
-                  data-logo_alignment="left">
-                </div>
+                {/* Google Sign-In button will be rendered here by the script */}
               </div>
             )}
           </div>
