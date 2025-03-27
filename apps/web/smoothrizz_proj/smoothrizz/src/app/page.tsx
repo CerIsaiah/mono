@@ -983,9 +983,9 @@ export default function Home() {
           property="og:description"
           content="Transform your dating game with SmoothRizz's AI-powered response generator. Get personalized, witty responses for dating apps and boost your success rate. Try it now!"
         />
-        <meta property="og:url" content="https://www.smoothrizz.com" />
+        <meta property="og:url" content="https://smoothrizz.com" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.smoothrizz.com/og-image.jpg" />
+        <meta property="og:image" content="https://smoothrizz.com/og-image.jpg" />
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="SmoothRizz - AI-Powered Dating Response Generator | Master Digital Charisma" />
@@ -993,7 +993,7 @@ export default function Home() {
           name="twitter:description"
           content="Transform your dating game with SmoothRizz's AI-powered response generator. Get personalized, witty responses for dating apps and boost your success rate. Try it now!"
         />
-        <meta name="twitter:image" content="https://www.smoothrizz.com/og-image.jpg" />
+        <meta name="twitter:image" content="https://smoothrizz.com/og-image.jpg" />
 
         <script
           type="application/ld+json"

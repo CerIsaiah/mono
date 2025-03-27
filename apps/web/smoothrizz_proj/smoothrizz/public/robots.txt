@@ -3,6 +3,3 @@ Allow: /
 
 # Specify the sitemap location
 Sitemap: https://smoothrizz.com/sitemap.xml
-
-# Prevent indexing of duplicate domains
-Disallow: https://www.smoothrizz.com/
