@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { checkUsageStatus } from '../db/usageTracking';
+import { checkUsageStatus, UsageStatus } from '../db/usageTracking';
 import { checkAndResetUsage } from '../db/dbOperations';
 
 const router = Router();
@@ -22,10 +22,12 @@ router.get('/', async (req: Request, res: Response) => {
     // Then get the current usage status (which will now reflect any reset)
     const usageStatus = await checkUsageStatus(identifier, isEmail, userName, userPicture);
     
-    res.json({
+    const response: UsageStatus = {
       ...usageStatus,
       wasReset
-    });
+    };
+    
+    res.json(response);
   } catch (error: any) {
     console.error('Error checking usage status:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });

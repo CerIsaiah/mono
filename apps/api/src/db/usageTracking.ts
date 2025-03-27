@@ -19,10 +19,11 @@ import type { Request, Response, NextFunction } from 'express';
 
 // Types
 export interface UsageStatus {
+  dailySwipes: number;
+  totalSwipes: number;
   isPremium: boolean;
   isTrial: boolean;
-  limitReached: boolean;
-  dailySwipes: number;
+  wasReset?: boolean;
   trialEndsAt?: Date;
 }
 
@@ -91,8 +92,8 @@ export async function checkUsageStatus(
       return { 
         isPremium: userData?.subscription_status === 'active',
         isTrial: isTrialActive ?? false,
-        limitReached: false,
         dailySwipes: userData?.daily_usage || 0,
+        totalSwipes: userData?.total_usage || 0,
         ...(isTrialActive && userData?.trial_end_date && {
           trialEndsAt: userData.trial_end_date
         })
@@ -103,8 +104,8 @@ export async function checkUsageStatus(
     return {
       isPremium: false,
       isTrial: false,
-      limitReached: false,
-      dailySwipes: ipData?.daily_usage || 0
+      dailySwipes: ipData?.daily_usage || 0,
+      totalSwipes: ipData?.total_usage || 0
     };
   } catch (error) {
     console.error('Error in checkUsageStatus:', error);
