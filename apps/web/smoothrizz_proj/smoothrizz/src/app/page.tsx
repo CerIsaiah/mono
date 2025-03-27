@@ -44,6 +44,54 @@ interface ResponseData {
 // Make sure to call `loadStripe` outside of a component's render
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
+// Add this near the top of the file, after imports
+const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
+
+// Add connection logging with error handling
+const logConnection = async (endpoint: string, options: RequestInit = {}) => {
+  try {
+    console.log(`Attempting to connect to ${API_BASE_URL}${endpoint}...`, {
+      baseUrl: API_BASE_URL,
+      endpoint,
+      timestamp: new Date().toISOString()
+    });
+
+    const startTime = Date.now();
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      credentials: 'include',
+    });
+    
+    const endTime = Date.now();
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
+    }
+
+    console.log(`Connection to ${endpoint} successful:`, {
+      status: response.status,
+      time: `${endTime - startTime}ms`,
+      timestamp: new Date().toISOString()
+    });
+
+    return response;
+  } catch (error) {
+    console.error(`Connection to ${endpoint} failed:`, {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      baseUrl: API_BASE_URL,
+      endpoint,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
 // Overlay component for Google Sign-In
 interface GoogleSignInOverlayProps {
   googleLoaded: boolean;
@@ -73,9 +121,6 @@ function GoogleSignInOverlay({ googleLoaded }: GoogleSignInOverlayProps) {
     </div>
   );
 }
-
-// Add this near the top of the file, after imports
-const API_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || '';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -161,11 +206,18 @@ export default function Home() {
         script.id = "google-client-script";
         script.onload = async () => {
           try {
-            console.log('Fetching Google client ID...');
-            const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+            console.log('Initializing Google Sign-In...');
+            const res = await logConnection('/auth/google-client-id');
             const { clientId } = await res.json();
-            console.log('Google client ID received');
+            console.log('Google client ID received:', { 
+              clientId: clientId ? 'Present' : 'Missing',
+              timestamp: new Date().toISOString()
+            });
             
+            if (!clientId) {
+              throw new Error('No client ID received from server');
+            }
+
             // @ts-ignore - Google Sign-In types are not properly exposed
             window.google.accounts.id.initialize({
               client_id: clientId,
@@ -179,11 +231,13 @@ export default function Home() {
               });
             }
             setGoogleLoaded(true);
+            console.log('Google Sign-In initialized successfully');
           } catch (err) {
             console.error("Error initializing Google Sign-In:", {
               error: err,
               message: err instanceof Error ? err.message : 'Unknown error',
-              stack: err instanceof Error ? err.stack : undefined
+              stack: err instanceof Error ? err.stack : undefined,
+              timestamp: new Date().toISOString()
             });
           }
         };
@@ -199,19 +253,22 @@ export default function Home() {
     try {
       const { credential } = response;
       
-      console.log('Starting Google sign-in process...');
-      const res = await fetch(`${API_BASE_URL}/auth/google`, {
+      console.log('Starting Google sign-in process...', {
+        timestamp: new Date().toISOString()
+      });
+      
+      const res = await logConnection('/auth/google', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ credential }),
       });
-
+      
       const data = await res.json();
       
       if (res.ok) {
-        console.log('Sign-in successful:', { user: data.user.email });
+        console.log('Sign-in successful:', { 
+          user: data.user.email,
+          timestamp: new Date().toISOString()
+        });
         setUser(data.user);
         setIsSignedIn(true);
         localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
@@ -219,36 +276,31 @@ export default function Home() {
         // Migrate anonymous saved responses if any
         const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
         if (savedResponses.length > 0) {
-          console.log('Migrating anonymous responses:', { count: savedResponses.length });
+          console.log('Migrating anonymous responses:', { 
+            count: savedResponses.length,
+            timestamp: new Date().toISOString()
+          });
           await Promise.all(
             savedResponses.map(async (item: any) => {
-              await fetch(`${API_BASE_URL}/api/saved-responses`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  response: item.response,
-                  userEmail: data.user.email,
-                  context: item.context,
-                  lastMessage: item.lastMessage,
-                  created_at: item.created_at,
-                }),
-              });
+              await logConnection('/api/saved-responses');
             })
           );
           localStorage.removeItem('anonymous_saved_responses');
           console.log('Anonymous responses migration complete');
         }
       } else {
-        console.error('Sign-in failed:', { error: data.error });
+        console.error('Sign-in failed:', { 
+          error: data.error,
+          timestamp: new Date().toISOString()
+        });
         throw new Error(data.error || 'Failed to sign in');
       }
     } catch (error) {
       console.error('Error signing in:', {
         error,
         message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString()
       });
       alert('Failed to sign in. Please try again.');
     }
