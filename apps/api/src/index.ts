@@ -1,7 +1,11 @@
 import express from 'express';
 import cors from 'cors';
-import openaiRouter from './routes/openai';  // Update this path
+import openaiRouter from './routes/openai';
 import authRouter from './routes/auth';
+import usageRouter from './routes/usage';
+import swipesRouter from './routes/swipes';
+import savedResponsesRouter from './routes/saved-responses';
+import subscriptionRouter from './routes/subscription';
 
 // Debug log for environment
 console.log('Environment Check:', {
@@ -48,6 +52,10 @@ app.get('/', (req, res) => {
 app.use('/api', openaiRouter);
 // Mount auth routes
 app.use('/auth', authRouter);
+app.use('/api/usage', usageRouter);
+app.use('/api/swipes', swipesRouter);
+app.use('/api/saved-responses', savedResponsesRouter);
+app.use('/api/subscription-status', subscriptionRouter);
 
 app.listen(PORT, () => {
   console.log(`✅ API running on port ${PORT}`);

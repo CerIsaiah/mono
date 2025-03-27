@@ -313,10 +313,11 @@ export default function ResponsesPage() {
         // If user is signed in, also save to their account
         if (user?.email) {
           try {
-            await fetch('/api/saved-responses', {
+            await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/saved-responses`, {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'x-user-email': user.email
               },
               body: JSON.stringify({
                 userEmail: user.email,

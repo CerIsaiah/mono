@@ -62,7 +62,12 @@ export default function SavedResponses() {
     const fetchSubscriptionStatus = async () => {
       if (user?.email) {
         try {
-          const response = await fetch(`/api/subscription-status?userEmail=${user.email}`);
+          const response = await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/subscription-status?userEmail=${user.email}`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-email': user.email
+            }
+          });
           const data = await response.json();
           setSubscriptionStatus(data.status);
           setSubscriptionDetails(data.details);
@@ -82,8 +87,9 @@ export default function SavedResponses() {
       if (user?.email) {
         // Fetch from database for signed-in users
         try {
-          const response = await fetch('/api/saved-responses', {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/saved-responses`, {
             headers: {
+              'Content-Type': 'application/json',
               'x-user-email': user.email,
             },
           });
@@ -111,12 +117,14 @@ export default function SavedResponses() {
   useEffect(() => {
     const fetchLearningPercentage = async () => {
       try {
-        const headers = {};
+        const headers = {
+          'Content-Type': 'application/json'
+        };
         if (user?.email) {
           headers['x-user-email'] = user.email;
         }
 
-        const response = await fetch('/api/learning-percentage', { headers });
+        const response = await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/learning-percentage`, { headers });
         const data = await response.json();
         setMatchPercentage(data.percentage);
       } catch (error) {
