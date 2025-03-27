@@ -100,11 +100,44 @@ router.get('/', async (req: Request, res: Response) => {
         // Check Stripe subscription if available
         if (stripe && user.stripe_customer_id) {
           try {
+            // First check if customer exists
+            try {
+              await stripe.customers.retrieve(user.stripe_customer_id);
+            } catch (customerError: any) {
+              if (customerError?.code === 'resource_missing') {
+                // Customer doesn't exist in Stripe, update user record
+                await supabase
+                  .from('users')
+                  .update({
+                    stripe_customer_id: null,
+                    subscription_status: 'free',
+                    subscription_type: null,
+                    subscription_end_date: null
+                  })
+                  .eq('email', user.email);
+                
+                status = 'free';
+                details = {
+                  type: null,
+                  isTrialActive: false,
+                  trialEndsAt: null,
+                  subscriptionEndsAt: null,
+                  isCanceled: false,
+                  hadTrial: details.hadTrial,
+                  canceledDuringTrial: false
+                };
+                return res.json({ status, details });
+              }
+              throw customerError;
+            }
+
+            // If customer exists, check subscriptions
             const subscriptions = await stripe.subscriptions.list({
               customer: user.stripe_customer_id,
               status: 'active',
               limit: 1
             });
+            
             if (subscriptions.data[0]?.cancel_at) {
               status = 'canceling';
               details.isCanceled = true;
