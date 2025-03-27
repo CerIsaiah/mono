@@ -1,13 +1,17 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import openaiRouter from './routes/openai';  // Update this path
 import authRouter from './routes/auth';
 
-dotenv.config();
-
 // Add this line to debug
-console.log('OpenAI API Key exists:', !!process.env.OPENAI_API_KEY);
+console.log('Environment Check:', {
+  googleClientId: !!process.env.GOOGLE_CLIENT_ID,
+  nodeEnv: process.env.NODE_ENV,
+  port: process.env.PORT
+});
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -16,31 +20,21 @@ const PORT = process.env.PORT || 4000;
 const allowedOrigins = [
   'http://localhost:3000',
   'https://smoothrizz.com',
-  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL
 ].filter(Boolean);
 
 console.log('Allowed CORS origins:', allowedOrigins);
 
 app.use(cors({
-  origin: (origin, callback) => {
-    console.log('Incoming request from origin:', origin);
-    
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      callback(null, true);
-      return;
-    }
-
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.log('Origin not allowed:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-email']
+  credentials: true
 }));
 
 
