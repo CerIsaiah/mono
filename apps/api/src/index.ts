@@ -1,45 +1,16 @@
-import dotenv from 'dotenv';
-import path from 'path';
-
-// Load .env from apps/api/.env
-const envPath = path.resolve(__dirname, '..', '.env');
-const result = dotenv.config({ path: envPath });
-
-if (result.error) {
-  console.error('Error loading .env file:', {
-    error: result.error.message,
-    searchPath: envPath,
-    currentDir: __dirname,
-    timestamp: new Date().toISOString()
-  });
-}
-
-// Add this debug log right after loading env
-console.log('Loaded Google Client ID:', {
-  id: process.env.GOOGLE_CLIENT_ID?.substring(0, 8) + '...',
-  exists: !!process.env.GOOGLE_CLIENT_ID,
-  envPath,
-  timestamp: new Date().toISOString()
-});
-
-// Log all available environment variables (excluding sensitive values)
-console.log('Available environment variables:', {
-  timestamp: new Date().toISOString(),
-  vars: Object.keys(process.env).filter(key => !key.includes('KEY') && !key.includes('SECRET'))
-});
-
 import express from 'express';
 import cors from 'cors';
 import openaiRouter from './routes/openai';  // Update this path
 import authRouter from './routes/auth';
 
-// Add this line to debug
+// Debug log for environment
 console.log('Environment Check:', {
+  environment: process.env.NODE_ENV,
   googleClientId: !!process.env.GOOGLE_CLIENT_ID,
-  nodeEnv: process.env.NODE_ENV,
   port: process.env.PORT
 });
 
+console.log('Node Environment:', process.env.NODE_ENV);
 const app = express();
 const PORT = process.env.PORT || 4000;
 
