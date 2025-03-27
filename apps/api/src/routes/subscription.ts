@@ -21,7 +21,7 @@ const supabase = createClient(
 const router = Router();
 
 interface SubscriptionDetails {
-  type: string | null;
+  type: 'standard' | 'premium' | null;
   isTrialActive: boolean;
   trialEndsAt: string | null;
   subscriptionEndsAt: string | null;
@@ -69,17 +69,18 @@ router.get('/', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to fetch subscription status' });
     }
 
-    // Determine the current subscription state
-    let status = 'free';
+    // Default to standard type and inactive status
     let details: SubscriptionDetails = {
-      type: user?.subscription_type || null,
+      type: user?.subscription_type as 'standard' | 'premium' | null || 'standard',
       isTrialActive: false,
       trialEndsAt: null,
       subscriptionEndsAt: null,
       isCanceled: user?.cancel_at_period_end || false,
       hadTrial: !!user?.trial_started_at,
-      canceledDuringTrial: user?.is_trial && user?.cancel_at_period_end
+      canceledDuringTrial: false
     };
+
+    let status: 'active' | 'inactive' = 'inactive';
 
     if (user) {
       const now = new Date();
@@ -88,70 +89,71 @@ router.get('/', async (req: Request, res: Response) => {
 
       // Check if trial is active
       if (user.is_trial && trialEndDate && trialEndDate > now) {
-        status = user.cancel_at_period_end ? 'trial-canceling' : 'trial';
+        status = 'active';
+        details.type = 'premium'; // Trial users get premium features
         details.isTrialActive = true;
         details.trialEndsAt = trialEndDate.toISOString();
+        details.canceledDuringTrial = user.cancel_at_period_end;
       }
-      // Check if subscription is active
-      else if (user.subscription_status === 'active') {
-        status = 'premium';
-        details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
-
-        // Check Stripe subscription if available
-        if (stripe && user.stripe_customer_id) {
-          try {
-            // First check if customer exists
-            try {
-              await stripe.customers.retrieve(user.stripe_customer_id);
-            } catch (customerError: any) {
-              if (customerError?.code === 'resource_missing') {
-                // Customer doesn't exist in Stripe, update user record
-                await supabase
-                  .from('users')
-                  .update({
-                    stripe_customer_id: null,
-                    subscription_status: 'free',
-                    subscription_type: null,
-                    subscription_end_date: null
-                  })
-                  .eq('email', user.email);
-                
-                status = 'free';
-                details = {
-                  type: null,
-                  isTrialActive: false,
-                  trialEndsAt: null,
-                  subscriptionEndsAt: null,
-                  isCanceled: false,
-                  hadTrial: details.hadTrial,
-                  canceledDuringTrial: false
-                };
-                return res.json({ status, details });
-              }
-              throw customerError;
-            }
-
-            // If customer exists, check subscriptions
+      // Only check Stripe if user has a customer ID (meaning they started a trial)
+      else if (user.stripe_customer_id && stripe) {
+        try {
+          const customer = await stripe.customers.retrieve(user.stripe_customer_id);
+          
+          if (customer.deleted) {
+            // Customer was deleted in Stripe, reset their data
+            await supabase
+              .from('users')
+              .update({
+                stripe_customer_id: null,
+                subscription_status: 'inactive',
+                subscription_type: 'standard',
+                subscription_end_date: null,
+                is_trial: false,
+                trial_end_date: null
+              })
+              .eq('email', user.email);
+          } else {
+            // Check active subscriptions
             const subscriptions = await stripe.subscriptions.list({
               customer: user.stripe_customer_id,
               status: 'active',
               limit: 1
             });
-            
-            if (subscriptions.data[0]?.cancel_at) {
-              status = 'canceling';
-              details.isCanceled = true;
+
+            if (subscriptions.data.length > 0) {
+              status = 'active';
+              details.type = 'premium';
+              details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
+              
+              if (subscriptions.data[0].cancel_at) {
+                details.isCanceled = true;
+              }
             }
-          } catch (stripeError) {
+          }
+        } catch (stripeError: any) {
+          if (stripeError?.code === 'resource_missing') {
+            // Customer doesn't exist in Stripe, reset their data
+            await supabase
+              .from('users')
+              .update({
+                stripe_customer_id: null,
+                subscription_status: 'inactive',
+                subscription_type: 'standard',
+                subscription_end_date: null,
+                is_trial: false,
+                trial_end_date: null
+              })
+              .eq('email', user.email);
+          } else {
             console.error('Error fetching Stripe subscription:', stripeError);
-            // Continue without Stripe data
           }
         }
       }
-      // Check if subscription is canceling
-      else if (user.subscription_status === 'canceling') {
-        status = 'canceling';
-        details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
+      // For users without Stripe customer ID, just use the database status
+      else {
+        status = user.subscription_status === 'active' ? 'active' : 'inactive';
+        details.type = user.subscription_type as 'standard' | 'premium' || 'standard';
       }
     }
 
