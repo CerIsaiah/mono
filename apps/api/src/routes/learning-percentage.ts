@@ -9,7 +9,6 @@ const supabase = createClient(
 
 const router = Router();
 
-const MIN_LEARNING_PERCENTAGE = 20;
 const MAX_LEARNING_PERCENTAGE = 100;
 const LEARNING_INCREMENT = 5;
 
@@ -17,26 +16,26 @@ router.get('/', async (req: Request, res: Response<LearningPercentageResponse>) 
   try {
     const userEmail = req.headers['x-user-email'] as string | undefined;
 
-    // For anonymous users or when logging out, return minimum percentage
+    // For anonymous users, return 0 percentage
     if (!userEmail) {
-      return res.json({ percentage: MIN_LEARNING_PERCENTAGE });
+      return res.json({ percentage: 0 });
     }
 
-    // Get user's swipe history
-    const { data: swipes, error: swipesError } = await supabase
-      .from('swipes')
-      .select('created_at')
-      .eq('user_email', userEmail.toLowerCase().trim())
-      .order('created_at', { ascending: false });
+    // Get user's total usage
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('total_usage')
+      .eq('email', userEmail.toLowerCase().trim())
+      .single();
 
-    if (swipesError) {
-      console.error('Error fetching swipes:', swipesError);
-      return res.json({ percentage: MIN_LEARNING_PERCENTAGE });
+    if (userError) {
+      console.error('Error fetching user data:', userError);
+      return res.json({ percentage: 0 });
     }
 
-    // Calculate percentage based on number of swipes
-    const totalSwipes = swipes?.length || 0;
-    let percentage = MIN_LEARNING_PERCENTAGE + (totalSwipes * LEARNING_INCREMENT);
+    // Calculate percentage based on total usage
+    const totalUsage = user?.total_usage || 0;
+    let percentage = totalUsage * LEARNING_INCREMENT;
     
     // Cap at maximum percentage
     percentage = Math.min(percentage, MAX_LEARNING_PERCENTAGE);
@@ -44,8 +43,8 @@ router.get('/', async (req: Request, res: Response<LearningPercentageResponse>) 
     res.json({ percentage });
   } catch (error: any) {
     console.error('Error calculating learning percentage:', error);
-    // Return minimum percentage instead of error status for better UX
-    res.json({ percentage: MIN_LEARNING_PERCENTAGE });
+    // Return 0 percentage instead of error status for better UX
+    res.json({ percentage: 2 });
   }
 });
 

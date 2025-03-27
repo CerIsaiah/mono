@@ -202,6 +202,14 @@ export default function SavedResponses() {
     }
     localStorage.removeItem('smoothrizz_user');
     setUser(null);
+    
+    // Reload Google Sign-In script
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+    
     router.push('/');
   };
 
@@ -500,6 +508,25 @@ export default function SavedResponses() {
                 SmoothRizz
               </Link>
             </div>
+            {!user && (
+              <div id="googleSignInButton" className="flex items-center">
+                <div id="g_id_onload"
+                  data-client_id={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+                  data-context="signin"
+                  data-ux_mode="popup"
+                  data-callback="handleCredentialResponse"
+                  data-auto_prompt="false">
+                </div>
+                <div className="g_id_signin"
+                  data-type="standard"
+                  data-shape="rectangular"
+                  data-theme="outline"
+                  data-text="signin_with"
+                  data-size="large"
+                  data-logo_alignment="left">
+                </div>
+              </div>
+            )}
           </div>
           
           {/* Tabs */}
