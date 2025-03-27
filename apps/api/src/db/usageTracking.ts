@@ -12,7 +12,7 @@ import {
   PREMIUM_MAX_PERCENTAGE,
   FREE_MAX_PERCENTAGE,
   MIN_LEARNING_PERCENTAGE
-} from '../../packages/constants';
+} from '../shared/constants';
 import { getUserData, getIPUsage, findOrCreateUser } from './dbOperations';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
