@@ -3,9 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { ParsedQs } from 'qs';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia'
-});
+// Initialize Stripe only if API key is available
+let stripe: Stripe | null = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: '2025-02-24.acacia'
+  });
+} else {
+  console.warn('STRIPE_SECRET_KEY not found in environment variables');
+}
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -46,7 +52,8 @@ router.get('/', async (req: Request, res: Response) => {
         subscription_end_date,
         email,
         cancel_at_period_end,
-        trial_started_at
+        trial_started_at,
+        stripe_customer_id
       `);
 
     if (userId) {
@@ -89,6 +96,24 @@ router.get('/', async (req: Request, res: Response) => {
       else if (user.subscription_status === 'active') {
         status = 'premium';
         details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
+
+        // Check Stripe subscription if available
+        if (stripe && user.stripe_customer_id) {
+          try {
+            const subscriptions = await stripe.subscriptions.list({
+              customer: user.stripe_customer_id,
+              status: 'active',
+              limit: 1
+            });
+            if (subscriptions.data[0]?.cancel_at) {
+              status = 'canceling';
+              details.isCanceled = true;
+            }
+          } catch (stripeError) {
+            console.error('Error fetching Stripe subscription:', stripeError);
+            // Continue without Stripe data
+          }
+        }
       }
       // Check if subscription is canceling
       else if (user.subscription_status === 'canceling') {
