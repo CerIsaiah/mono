@@ -1,0 +1,16 @@
+{
+  "name": "smoothrizz-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "apps/web/smoothrizz_proj/smoothrizz",
+    "apps/api",
+    "apps/packages"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "npm run dev --workspaces --if-present",
+    "start": "npm run start --workspaces --if-present"
+  }
+} 
