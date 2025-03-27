@@ -1,5 +1,26 @@
 "use client";
 import React, { useEffect, useRef } from 'react';
+import { GoogleSignInProps, GoogleAuthResponse } from '@api/types/auth';
+
+// Declare the Google Sign-In API types
+declare global {
+  interface Window {
+    google: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+          }) => void;
+          renderButton: (element: HTMLElement, options: {
+            theme: string;
+            size: string;
+          }) => void;
+        };
+      };
+    };
+  }
+}
 
 /**
  * Google Sign-In Overlay Component
@@ -24,8 +45,8 @@ import React, { useEffect, useRef } from 'react';
  * - src/app/api/auth/google/route.js: Authentication endpoint
  */
 
-export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, preventReload = false }) {
-  const overlayButtonRef = useRef(null);
+export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, preventReload = false }: GoogleSignInProps) {
+  const overlayButtonRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const initializeButton = async () => {
@@ -38,7 +59,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
           // Initialize with fetched client ID
           window.google.accounts.id.initialize({
             client_id: clientId,
-            callback: async (response) => {
+            callback: async (response: { credential: string }) => {
               try {
                 const res = await fetch('/api/auth/google', {
                   method: 'POST',
@@ -49,7 +70,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                 });
                 
                 if (res.ok) {
-                  const data = await res.json();
+                  const data: GoogleAuthResponse = await res.json();
                   // Store user data in localStorage
                   localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
                   

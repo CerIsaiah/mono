@@ -3,13 +3,17 @@
       "target": "es2020",
       "module": "commonjs",
       "outDir": "./dist",
-      "rootDir": "./src",
+      "rootDir": "../../",
       "strict": true,
       "esModuleInterop": true,
       "forceConsistentCasingInFileNames": true,
-      "skipLibCheck": true
+      "skipLibCheck": true,
+      "baseUrl": ".",
+      "paths": {
+        "@packages/*": ["../packages/*"]
+      }
     },
-    "include": ["src/**/*"],
+    "include": ["src/**/*", "../packages/**/*"],
     "exclude": ["node_modules"]
 }
   

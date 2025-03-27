@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import openaiRouter from './routes/openai';  // Update this path
+import authRouter from './routes/auth';
 
 dotenv.config();
 
@@ -21,6 +22,8 @@ app.get('/', (req, res) => {
 });
 // Mount your OpenAI API route
 app.use('/api', openaiRouter);
+// Mount auth routes
+app.use('/auth', authRouter);
 
 app.listen(PORT, () => {
   console.log(`✅ API running on port ${PORT}`);
