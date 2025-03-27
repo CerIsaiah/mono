@@ -1,6 +1,6 @@
 import express, { Request, Response, Router, RequestHandler } from 'express';
 import { OAuth2Client } from 'google-auth-library';
-import { findOrCreateUser, getIPUsage } from '@packages/db/dbOperations';
+import { findOrCreateUser, getIPUsage } from '../db/dbOperations';
 import { GoogleAuthPayload, GoogleAuthResponse } from '../types/auth';
 
 const router: Router = express.Router();
