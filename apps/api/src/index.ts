@@ -2,16 +2,25 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Load .env from apps/api/.env
-const envPath = path.resolve(process.cwd(), 'apps/api/.env');
+const envPath = path.resolve(__dirname, '..', '.env');
 const result = dotenv.config({ path: envPath });
 
 if (result.error) {
   console.error('Error loading .env file:', {
     error: result.error.message,
     searchPath: envPath,
+    currentDir: __dirname,
     timestamp: new Date().toISOString()
   });
 }
+
+// Add this debug log right after loading env
+console.log('Loaded Google Client ID:', {
+  id: process.env.GOOGLE_CLIENT_ID?.substring(0, 8) + '...',
+  exists: !!process.env.GOOGLE_CLIENT_ID,
+  envPath,
+  timestamp: new Date().toISOString()
+});
 
 // Log all available environment variables (excluding sensitive values)
 console.log('Available environment variables:', {
