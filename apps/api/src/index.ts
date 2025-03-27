@@ -6,6 +6,7 @@ import usageRouter from './routes/usage';
 import swipesRouter from './routes/swipes';
 import savedResponsesRouter from './routes/saved-responses';
 import subscriptionRouter from './routes/subscription';
+import learningPercentageRouter from './routes/learning-percentage';
 
 // Debug log for environment
 console.log('Environment Check:', {
@@ -29,6 +30,7 @@ console.log('Allowed CORS origins:', allowedOrigins);
 
 app.use(cors({
   origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -39,7 +41,6 @@ app.use(cors({
   credentials: true
 }));
 
-
 // Increase the limit to 50MB for image uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -48,14 +49,14 @@ app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Smoothrizz API' });
 });
 
-// Mount your OpenAI API route
+// Mount your routes
 app.use('/api', openaiRouter);
-// Mount auth routes
 app.use('/auth', authRouter);
 app.use('/api/usage', usageRouter);
 app.use('/api/swipes', swipesRouter);
 app.use('/api/saved-responses', savedResponsesRouter);
 app.use('/api/subscription-status', subscriptionRouter);
+app.use('/api/learning-percentage', learningPercentageRouter);
 
 app.listen(PORT, () => {
   console.log(`✅ API running on port ${PORT}`);

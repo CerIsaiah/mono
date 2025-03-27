@@ -120,15 +120,27 @@ export default function SavedResponses() {
         const headers = {
           'Content-Type': 'application/json'
         };
+        
+        // Only add user email header if user is signed in
         if (user?.email) {
           headers['x-user-email'] = user.email;
         }
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/learning-percentage`, { headers });
+        const response = await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/learning-percentage`, { 
+          headers,
+          // Add error handling for failed requests
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
         setMatchPercentage(data.percentage);
       } catch (error) {
         console.error('Error fetching learning percentage:', error);
+        // Set to minimum percentage on error
         setMatchPercentage(MIN_LEARNING_PERCENTAGE);
       }
     };
