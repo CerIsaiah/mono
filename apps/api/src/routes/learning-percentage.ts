@@ -17,7 +17,7 @@ router.get('/', async (req: Request, res: Response<LearningPercentageResponse>) 
   try {
     const userEmail = req.headers['x-user-email'] as string | undefined;
 
-    // For anonymous users, return minimum percentage
+    // For anonymous users or when logging out, return minimum percentage
     if (!userEmail) {
       return res.json({ percentage: MIN_LEARNING_PERCENTAGE });
     }
@@ -31,7 +31,7 @@ router.get('/', async (req: Request, res: Response<LearningPercentageResponse>) 
 
     if (swipesError) {
       console.error('Error fetching swipes:', swipesError);
-      return res.status(500).json({ percentage: MIN_LEARNING_PERCENTAGE });
+      return res.json({ percentage: MIN_LEARNING_PERCENTAGE });
     }
 
     // Calculate percentage based on number of swipes
@@ -44,7 +44,8 @@ router.get('/', async (req: Request, res: Response<LearningPercentageResponse>) 
     res.json({ percentage });
   } catch (error: any) {
     console.error('Error calculating learning percentage:', error);
-    res.status(500).json({ percentage: MIN_LEARNING_PERCENTAGE });
+    // Return minimum percentage instead of error status for better UX
+    res.json({ percentage: MIN_LEARNING_PERCENTAGE });
   }
 });
 

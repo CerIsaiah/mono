@@ -128,19 +128,20 @@ export default function SavedResponses() {
 
         const response = await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/learning-percentage`, { 
           headers,
-          // Add error handling for failed requests
           credentials: 'include'
         });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
         const data = await response.json();
-        setMatchPercentage(data.percentage);
+        
+        // Always expect a percentage value
+        if (typeof data.percentage === 'number') {
+          setMatchPercentage(data.percentage);
+        } else {
+          console.warn('Unexpected learning percentage response:', data);
+          setMatchPercentage(MIN_LEARNING_PERCENTAGE);
+        }
       } catch (error) {
         console.error('Error fetching learning percentage:', error);
-        // Set to minimum percentage on error
         setMatchPercentage(MIN_LEARNING_PERCENTAGE);
       }
     };
