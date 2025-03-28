@@ -14,6 +14,9 @@ import { GoogleSignInOverlay } from '../components/GoogleSignInOverlay';
 import { UpgradePopup } from '../components/UpgradePopup';
 import { analyzeScreenshot } from '../openai';
 
+// Add this near the top of the file, after imports
+const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
+
 // Types
 interface User {
   email: string;
@@ -198,7 +201,7 @@ export default function ResponsesPage() {
         if (anonymousResponses.length > 0) {
           try {
             // Migrate anonymous responses to user account
-            await fetch('/api/saved-responses', {
+            await fetch(`${API_BASE_URL}/api/saved-responses`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
@@ -236,7 +239,7 @@ export default function ResponsesPage() {
           ...(savedUser && { 'x-user-email': JSON.parse(savedUser).email })
         };
 
-        const response = await fetch('/api/usage', { headers });
+        const response = await fetch(`${API_BASE_URL}/api/usage`, { headers });
         const data = await response.json();
         
         setUsageCount(data.dailySwipes || 0);
@@ -268,7 +271,7 @@ export default function ResponsesPage() {
         ...(user?.email && { 'x-user-email': user.email })
       };
       
-      const response = await fetch('/api/swipes', {
+      const response = await fetch(`${API_BASE_URL}/api/swipes`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ direction })
@@ -307,7 +310,7 @@ export default function ResponsesPage() {
         // If user is signed in, also save to their account
         if (user?.email) {
           try {
-            await fetch('/api/saved-responses', {
+            await fetch(`${API_BASE_URL}/api/saved-responses`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -479,7 +482,7 @@ export default function ResponsesPage() {
 
   const handleCheckout = async () => {
     try {
-      const response = await fetch('/api/checkout_sessions', {
+      const response = await fetch(`${API_BASE_URL}/api/checkout_sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -504,7 +507,7 @@ export default function ResponsesPage() {
     const fetchLearningPercentage = async () => {
       if (user?.email) {
         try {
-          const response = await fetch('/api/learning-percentage', {
+          const response = await fetch(`${API_BASE_URL}/api/learning-percentage`, {
             headers: {
               'x-user-email': user.email
             }
