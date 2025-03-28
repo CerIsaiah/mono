@@ -7,6 +7,9 @@ import swipesRouter from './routes/swipes';
 import savedResponsesRouter from './routes/saved-responses';
 import subscriptionRouter from './routes/subscription';
 import learningPercentageRouter from './routes/learning-percentage';
+import checkoutRouter from './routes/checkout';
+import webhooksRouter from './routes/webhooks';
+import cancelSubscriptionRouter from './routes/cancelSubscription';
 
 // Debug log for environment
 console.log('Environment Check:', {
@@ -41,7 +44,12 @@ app.use(cors({
   credentials: true
 }));
 
-// Increase the limit to 50MB for image uploads
+// IMPORTANT: Use express.raw() for the webhook BEFORE express.json()
+// Stripe requires the raw body to verify webhook signatures.
+app.use('/api/webhooks', express.raw({ type: 'application/json' }));
+
+// Middleware for parsing JSON and urlencoded data for other routes
+// Increase the limit to 50MB for image uploads etc.
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -57,6 +65,9 @@ app.use('/api/swipes', swipesRouter);
 app.use('/api/saved-responses', savedResponsesRouter);
 app.use('/api/subscription-status', subscriptionRouter);
 app.use('/api/learning-percentage', learningPercentageRouter);
+app.use('/api/checkout', checkoutRouter);
+app.use('/api/webhooks', webhooksRouter);
+app.use('/api/cancel-subscription', cancelSubscriptionRouter);
 
 app.listen(PORT, () => {
   console.log(`✅ API running on port ${PORT}`);
