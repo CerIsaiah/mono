@@ -10,6 +10,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { UpgradePopup } from './components/UpgradePopup';
 import { convertFileToBase64 } from '@/utils/usageTracking';
+import { Analytics } from "@vercel/analytics/react"
 
 // Types
 interface User {
