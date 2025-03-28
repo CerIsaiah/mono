@@ -694,7 +694,6 @@ export default function ResponsesPage() {
             onClose={() => setShowSignInOverlay(false)}
             onSignInSuccess={() => {
               setShowSignInOverlay(false);
-              router.push('/saved');
             }}
             preventReload={true}
           />
