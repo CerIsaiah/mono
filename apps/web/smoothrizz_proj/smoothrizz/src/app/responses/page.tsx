@@ -14,37 +14,41 @@ import { GoogleSignInOverlay } from '../components/GoogleSignInOverlay';
 import { UpgradePopup } from '../components/UpgradePopup';
 import { analyzeScreenshot } from '../openai';
 
-/**
- * Responses Page Component
- * 
- * This file handles the main response card swiping interface and user interactions.
- * 
- * Main Features:
- * - Tinder-style card swiping interface
- * - Response regeneration
- * - Usage tracking
- * - Google Sign-In integration
- * - Premium upgrade flow
- * 
- * Dependencies:
- * - react-tinder-card: For swipeable cards
- * - @/utils/dbOperations: For usage tracking
- * - @/store/responseStore: For managing response state
- * 
- * Side Effects:
- * - Updates usage records in database
- * - Saves responses to user account
- * - Manages local storage for anonymous users
- * 
- * Connected Files:
- * - src/app/api/swipes/route.js: Tracks swipe actions
- * - src/app/api/auth/google/route.js: Handles authentication
- * - src/components/GoogleSignInOverlay.js: Sign-in UI
- * - src/components/UpgradePopup.js: Premium upgrade UI
- */
+// Types
+interface User {
+  email: string;
+  name?: string;
+  picture?: string;
+}
+
+interface LoadingScreenProps {}
+
+interface RegeneratePopupProps {
+  onRegenerate: () => void;
+  onClose: () => void;
+}
+
+interface PhotoPreviewProps {
+  imageUrl: string;
+  onClose: () => void;
+}
+
+interface SwipeDirection {
+  direction: 'left' | 'right';
+}
+
+interface CardRef {
+  current: {
+    swipe: (dir: 'left' | 'right') => Promise<void>;
+    restoreCard: () => Promise<void>;
+  } | null;
+}
+
+// Add Direction type for TinderCard
+type Direction = 'left' | 'right' | 'up' | 'down';
 
 // Loading screen component
-function LoadingScreen() {
+function LoadingScreen({}: LoadingScreenProps) {
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-pink-500/10 via-black/50 to-gray-900/50 backdrop-blur-sm z-[70] flex items-center justify-center">
       <div className="text-white text-center space-y-4">
@@ -56,7 +60,7 @@ function LoadingScreen() {
 }
 
 // Update RegeneratePopup to match premium styling
-function RegeneratePopup({ onRegenerate, onClose }) {
+function RegeneratePopup({ onRegenerate, onClose }: RegeneratePopupProps) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] p-4">
       <div className="bg-white p-6 rounded-xl w-full max-w-md mx-auto relative">
@@ -84,7 +88,7 @@ function RegeneratePopup({ onRegenerate, onClose }) {
 }
 
 // Update PhotoPreview component to handle outside clicks
-function PhotoPreview({ imageUrl, onClose }) {
+function PhotoPreview({ imageUrl, onClose }: PhotoPreviewProps) {
   return (
     <div 
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
@@ -112,37 +116,37 @@ function PhotoPreview({ imageUrl, onClose }) {
 }
 
 export default function ResponsesPage() {
-  const [responses, setResponses] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(-1);
-  const [mode, setMode] = useState(null);
-  const [lastFile, setLastFile] = useState(null);
-  const [lastContext, setLastContext] = useState('');
-  const [lastText, setLastText] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false);
-  const [user, setUser] = useState(null);
-  const [usageCount, setUsageCount] = useState(0);
-  const [showUpgradePopup, setShowUpgradePopup] = useState(false);
-  const [isPremium, setIsPremium] = useState(false);
-  const [googleLoaded, setGoogleLoaded] = useState(false);
-  const [showRegeneratePopup, setShowRegeneratePopup] = useState(false);
-  const [lastDirection, setLastDirection] = useState();
+  const [responses, setResponses] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(-1);
+  const [mode, setMode] = useState<string | null>(null);
+  const [lastFile, setLastFile] = useState<string | null>(null);
+  const [lastContext, setLastContext] = useState<string>('');
+  const [lastText, setLastText] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isSignedIn, setIsSignedIn] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [usageCount, setUsageCount] = useState<number>(0);
+  const [showUpgradePopup, setShowUpgradePopup] = useState<boolean>(false);
+  const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [googleLoaded, setGoogleLoaded] = useState<boolean>(false);
+  const [showRegeneratePopup, setShowRegeneratePopup] = useState<boolean>(false);
+  const [lastDirection, setLastDirection] = useState<string>();
   const router = useRouter();
 
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState('');
+  const [showPreview, setShowPreview] = useState<boolean>(false);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
 
-  const [showSignInOverlay, setShowSignInOverlay] = useState(false);
+  const [showSignInOverlay, setShowSignInOverlay] = useState<boolean>(false);
 
-  const [key, setKey] = useState(0);
+  const [key, setKey] = useState<number>(0);
 
   // Add new state for premium features
-  const [matchPercentage, setMatchPercentage] = useState(0);
+  const [matchPercentage, setMatchPercentage] = useState<number>(0);
 
   // Add new state for tracking if user can swipe
-  const [canInteract, setCanInteract] = useState(true);
+  const [canInteract, setCanInteract] = useState<boolean>(true);
 
-  const childRefs = useRef(
+  const childRefs = useRef<CardRef[]>(
     Array(responses.length)
       .fill(0)
       .map(() => React.createRef())
@@ -211,12 +215,6 @@ export default function ResponsesPage() {
             console.error('Error migrating anonymous responses:', error);
           }
         }
-        
-        const justSignedIn = localStorage.getItem('just_signed_in');
-        if (justSignedIn) {
-          localStorage.removeItem('just_signed_in');
-          router.push('/');
-        }
       }
     };
     checkAuth();
@@ -256,16 +254,12 @@ export default function ResponsesPage() {
     checkInitialUsage();
   }, []);
 
-  // Update useEffect to handle last card and show regenerate popup
-  useEffect(() => {
-    if (responses && responses.length > 0 && currentIndex === -1) {
-      setShowRegeneratePopup(true);
-    }
-  }, [currentIndex, responses]);
-
   // Update swiped function to handle local storage and API calls
-  const swiped = async (direction, responseToDelete, index) => {
+  const swiped = async (direction: Direction, responseToDelete: string, index: number) => {
     if (!canInteract) return;
+    
+    // Only handle left/right swipes
+    if (direction !== 'left' && direction !== 'right') return;
     
     try {
       // Track swipe first
@@ -313,7 +307,7 @@ export default function ResponsesPage() {
         // If user is signed in, also save to their account
         if (user?.email) {
           try {
-            await fetch(`${process.env.NEXT_PUBLIC_RAILWAY_URL}/api/saved-responses`, {
+            await fetch('/api/saved-responses', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -348,17 +342,19 @@ export default function ResponsesPage() {
 
     } catch (error) {
       console.error('Error tracking swipe:', error);
-      // Still update UI on error to maintain responsiveness
       setCurrentIndex(index - 1);
     }
   };
   
-  const outOfFrame = (index) => {
+  const outOfFrame = (index: number) => {
     console.log(`Card ${index} left the screen`);
   };
 
-  const swipe = async (dir) => {
+  const swipe = async (dir: Direction) => {
     if (!canInteract || currentIndex < 0) return;
+    
+    // Only handle left/right swipes
+    if (dir !== 'left' && dir !== 'right') return;
     
     try {
       const currentRef = childRefs.current[currentIndex];
@@ -371,58 +367,101 @@ export default function ResponsesPage() {
     }
   };
 
-  // Add Google Sign-In initialization
-  useEffect(() => {
-    if (window.google) {
-      setGoogleLoaded(true);
-    }
-  }, []);
+  // Helper function to convert base64 to File
+  const base64ToFile = async (base64String: string, filename: string): Promise<File> => {
+    const res = await fetch(base64String);
+    const blob = await res.blob();
+    return new File([blob], filename, { type: blob.type });
+  };
 
-  // Add this effect to check limits on mount
-  useEffect(() => {
-    const checkInitialLimits = async () => {
-      try {
-        const headers = {
-          'Content-Type': 'application/json',
-          ...(user?.email && { 'x-user-email': user.email })
+  // Update handleRegenerate function
+  const handleRegenerate = async () => {
+    try {
+      setIsGenerating(true);
+      
+      // Check if we're using text input or file input
+      if (lastContext && lastText) {
+        // Text input path
+        const newResponses = await analyzeScreenshot(
+          null, // no file
+          mode,
+          isSignedIn,
+          lastContext,
+          lastText
+        );
+        
+        // Update responses state and localStorage
+        setResponses(newResponses);
+        setCurrentIndex(newResponses.length - 1);
+        setKey(prevKey => prevKey + 1); // Force re-render of cards
+        
+        // Update localStorage with new responses
+        const savedData = {
+          responses: newResponses,
+          currentIndex: newResponses.length - 1,
+          mode,
+          lastFile: null, // ensure this is null for text input
+          lastContext,
+          lastText,
+          inputMode: 'text' as const // Add this to track input mode
         };
-
-        const response = await fetch('/api/swipes', { headers });
-        const data = await response.json();
-
-        if (!data.canSwipe) {
-          localStorage.removeItem('current_responses');
-          setCanInteract(false); // Prevent interactions
-          
-          if (data.requiresSignIn) {
-            setShowSignInOverlay(true);
-          } else if (data.requiresUpgrade) {
-            setShowUpgradePopup(true);
-          }
+        localStorage.setItem('current_responses', JSON.stringify(savedData));
+        
+      } else if (lastFile) {
+        // Existing file input path
+        const file = await base64ToFile(lastFile, 'screenshot.png');
+        
+        if (!file) {
+          console.error('No screenshot available for regeneration');
+          router.push('/');
           return;
         }
 
-        setCanInteract(true); // Allow interactions
-        setUsageCount(data.dailySwipes || 0);
-      } catch (error) {
-        console.error('Error checking initial limits:', error);
-        setCanInteract(false); // Prevent interactions on error
+        const newResponses = await analyzeScreenshot(file, mode, isSignedIn, lastContext, lastText);
+        
+        // Update responses state and localStorage
+        setResponses(newResponses);
+        setCurrentIndex(newResponses.length - 1);
+        setKey(prevKey => prevKey + 1);
+        
+        const savedData = {
+          responses: newResponses,
+          currentIndex: newResponses.length - 1,
+          mode,
+          lastFile,
+          lastContext,
+          lastText,
+          inputMode: 'screenshot' as const
+        };
+        localStorage.setItem('current_responses', JSON.stringify(savedData));
+      } else {
+        console.error('No input available for regeneration');
+        router.push('/');
+        return;
       }
-    };
-
-    checkInitialLimits();
-  }, [user]); // Run when user changes
+      
+      // Update childRefs for new responses
+      childRefs.current = Array(responses.length)
+        .fill(0)
+        .map(() => React.createRef());
+        
+    } catch (error) {
+      console.error('Error regenerating responses:', error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   // Update keyboard handler to prevent rapid firing
   useEffect(() => {
     let isProcessing = false;
     
-    const handleKeyPress = async (event) => {
+    const handleKeyPress = async (event: KeyboardEvent) => {
       if (isProcessing) return;
       
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         isProcessing = true;
-        const direction = event.key === 'ArrowLeft' ? 'left' : 'right';
+        const direction = event.key === 'ArrowLeft' ? 'left' as const : 'right' as const;
         await swipe(direction);
         setTimeout(() => {
           isProcessing = false;
@@ -460,19 +499,7 @@ export default function ResponsesPage() {
     }
   };
 
-  // Update togglePreview to use lastFile
-  const togglePreview = () => {
-    if (lastFile) {
-      setPreviewUrl(lastFile);
-      setShowPreview(!showPreview);
-    }
-  };
-
-  // Add computed properties for swipe controls
-  const canSwipe = currentIndex >= 0;
-  const canGoBack = currentIndex < responses.length - 1;
-
-  // Update the useEffect to fetch the learning percentage instead of calculating it
+  // Update the useEffect to fetch the learning percentage
   useEffect(() => {
     const fetchLearningPercentage = async () => {
       if (user?.email) {
@@ -502,107 +529,6 @@ export default function ResponsesPage() {
     fetchLearningPercentage();
   }, [user?.email, responses.length]);
 
-  // Helper function to convert base64 to File
-  const base64ToFile = async (base64String, filename) => {
-    const res = await fetch(base64String);
-    const blob = await res.blob();
-    return new File([blob], filename, { type: blob.type });
-  };
-
-  // Also add cleanup when component unmounts
-  useEffect(() => {
-    return () => {
-      // Only clean up if navigating away from responses page
-      if (window.location.pathname !== '/responses') {
-        localStorage.removeItem('current_responses');
-      }
-    };
-  }, []);
-
-  // Update handleRegenerate function
-  const handleRegenerate = async () => {
-    try {
-      setIsGenerating(true);
-      
-      // Check if we're using text input or file input
-      if (lastContext && lastText) {
-        // Text input path
-        const newResponses = await analyzeScreenshot(
-          null, // no file
-          mode,
-          isSignedIn,
-          lastContext,
-          lastText
-        );
-        
-        // Update responses state and localStorage
-        setResponses(newResponses);
-        setCurrentIndex(newResponses.length - 1);
-        setKey(prevKey => prevKey + 1); // Force re-render of cards
-        
-        // Update localStorage with new responses
-        const savedData = {
-          responses: newResponses,
-          currentIndex: newResponses.length - 1,
-          mode,
-          lastFile: null, // ensure this is null for text input
-          lastContext,
-          lastText,
-          inputMode: 'text' // Add this to track input mode
-        };
-        localStorage.setItem('current_responses', JSON.stringify(savedData));
-        
-      } else if (lastFile) {
-        // Existing file input path
-        const file = await base64ToFile(lastFile, 'screenshot.png');
-        
-        if (!file) {
-          console.error('No screenshot available for regeneration');
-          router.push('/');
-          return;
-        }
-
-        const newResponses = await analyzeScreenshot(file, mode, isSignedIn, lastContext, lastText);
-        
-        // Update responses state and localStorage
-        setResponses(newResponses);
-        setCurrentIndex(newResponses.length - 1);
-        setKey(prevKey => prevKey + 1);
-        
-        const savedData = {
-          responses: newResponses,
-          currentIndex: newResponses.length - 1,
-          mode,
-          lastFile,
-          lastContext,
-          lastText,
-          inputMode: 'screenshot'
-        };
-        localStorage.setItem('current_responses', JSON.stringify(savedData));
-      } else {
-        console.error('No input available for regeneration');
-        router.push('/');
-        return;
-      }
-      
-      // Update childRefs for new responses
-      childRefs.current = Array(newResponses.length)
-        .fill(0)
-        .map(() => React.createRef());
-        
-    } catch (error) {
-      console.error('Error regenerating responses:', error);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Update GoogleSignInOverlay handling
-  const handleSignInSuccess = () => {
-    setShowSignInOverlay(false);
-    router.push('/saved');
-  };
-
   return (
     <>
       <Script
@@ -626,7 +552,7 @@ export default function ResponsesPage() {
             {/* Top buttons container */}
             <div className="flex justify-center gap-1.5 z-20">
               <button
-                onClick={togglePreview}
+                onClick={() => setShowPreview(true)}
                 className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded-full bg-white/90 backdrop-blur-sm text-[11px] shadow-sm font-medium"
               >
                 Review Photo
@@ -644,7 +570,7 @@ export default function ResponsesPage() {
               </button>
             </div>
 
-            {/* AI Learning Bar in fixed position */}
+            {/* AI Learning Bar */}
             <div className="mx-auto w-full max-w-md px-4">
               <div className="bg-white/90 backdrop-blur-sm rounded-lg p-1.5 border border-gray-200 shadow-sm">
                 <div className="flex items-center justify-between mb-0.5">
@@ -689,28 +615,23 @@ export default function ResponsesPage() {
             </div>
           </div>
 
-          {/* Cards container with smaller size */}
+          {/* Cards container */}
           <div className="flex-1 flex flex-col items-center justify-center">
             <div className="w-full max-w-[280px] h-[380px] relative" key={key}>
-              {responses && responses.map((response, index) => {
-                // Log card rendering for debugging
-                console.log('Rendering card:', { index, currentIndex, response });
-                
-                // Only render cards from currentIndex down to 0
+              {responses.map((response, index) => {
                 if (index > currentIndex) return null;
                 
                 return (
                   <TinderCard
                     ref={childRefs.current[index]}
                     key={`card-${index}-${key}`}
-                    onSwipe={(dir) => canInteract && swiped(dir, response, index)}
+                    onSwipe={(dir: Direction) => canInteract && swiped(dir, response, index)}
                     onCardLeftScreen={() => outOfFrame(index)}
                     preventSwipe={canInteract ? ['up', 'down'] : ['up', 'down', 'left', 'right']}
                     className="absolute w-full h-full cursor-grab active:cursor-grabbing"
                   >
                     <div className="bg-white rounded-xl p-5 w-full h-full flex flex-col transform transition-all duration-200 
                       hover:scale-[1.02] relative border border-gray-200 shadow-lg">
-                      {/* Card content */}
                       <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                         <span className="px-2 py-1 bg-white rounded-full text-[15px] font-medium text-gray-500 shadow-sm border border-gray-200">
                           SWIPE
@@ -725,7 +646,6 @@ export default function ResponsesPage() {
                         </div>
                       </div>
 
-                      {/* Swipe instructions */}
                       <div className="absolute bottom-4 left-0 right-0 flex justify-between px-6">
                         <span className="text-red-400 text-sm">← Skip card</span>
                         <span className="text-green-500 text-sm">Save style →</span>
@@ -736,7 +656,7 @@ export default function ResponsesPage() {
               })}
             </div>
 
-            {/* Swipe Counter - Moved below card */}
+            {/* Swipe Counter */}
             <div className="text-center mt-4">
               <span className="text-xs font-medium text-gray-600">
                 {isPremium ? (
@@ -747,10 +667,8 @@ export default function ResponsesPage() {
               </span>
             </div>
 
-            {/* Bottom buttons with proper spacing */}
+            {/* Bottom buttons */}
             <div className="w-full max-w-[280px] space-y-1.5 mt-4">
-          
-              {/* New Screenshot Button */}
               <button
                 onClick={() => router.push('/')}
                 className="w-full bg-black/5 hover:bg-black/10 px-4 py-2 rounded-full inline-flex items-center justify-center space-x-1.5 transition-all duration-200"
@@ -771,12 +689,14 @@ export default function ResponsesPage() {
           <GoogleSignInOverlay 
             googleLoaded={googleLoaded}
             onClose={() => setShowSignInOverlay(false)}
-            onSignInSuccess={handleSignInSuccess}
+            onSignInSuccess={() => {
+              setShowSignInOverlay(false);
+              router.push('/saved');
+            }}
             preventReload={true}
           />
         )}
 
-        {/* Only show upgrade popup for signed-in users */}
         {showUpgradePopup && isSignedIn && !isPremium && (
           <UpgradePopup 
             onClose={() => setShowUpgradePopup(false)} 
@@ -794,7 +714,6 @@ export default function ResponsesPage() {
           />
         )}
 
-        {/* Add PhotoPreview component before closing root div */}
         {showPreview && lastFile && (
           <PhotoPreview 
             imageUrl={lastFile}
@@ -805,5 +724,3 @@ export default function ResponsesPage() {
     </>
   );
 } 
- 
- 

@@ -83,12 +83,17 @@ router.post('/openai', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
-    let userMessage: string | Array<any> = [{
+    let userMessage: any[] = [{
       type: 'text',
       text: 'What should I say back?',
     }];
 
     if (imageBase64) {
+      // Validate base64 string
+      if (!/^[A-Za-z0-9+/=]+$/.test(imageBase64)) {
+        throw new Error('Invalid base64 format');
+      }
+
       userMessage = [
         {
           type: 'text',
