@@ -71,6 +71,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                 
                 if (res.ok) {
                   const data: GoogleAuthResponse = await res.json();
+                  
                   // Store user data in localStorage
                   localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
                   
@@ -82,13 +83,18 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                   // Close the overlay after successful sign-in
                   if (onClose) onClose();
                   
-                  // Only reload if not prevented. This is used to allow a redirect to the saved page after sign-in.
+                  // Only reload if not prevented
                   if (!preventReload) {
                     window.location.reload();
                   }
+                } else {
+                  const errorData = await res.json();
+                  console.error('Sign-in error:', errorData);
+                  alert('Failed to sign in. Please try again.');
                 }
               } catch (error) {
                 console.error('Sign-in error:', error);
+                alert('Failed to sign in. Please try again.');
               }
             }
           });
