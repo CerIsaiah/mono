@@ -2,6 +2,9 @@
 import React, { useEffect, useRef } from 'react';
 import { GoogleSignInProps, GoogleAuthResponse } from '@api/types/auth';
 
+// Add this near the top of the file
+const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
+
 // Declare the Google Sign-In API types
 declare global {
   interface Window {
@@ -37,7 +40,7 @@ declare global {
  * 
  * Side Effects:
  * - Initializes Google Sign-In
- * - Makes API calls to /api/auth/google
+ * - Makes API calls to API_BASE_URL/auth/google
  * 
  * Connected Files:
  * - src/app/responses/page.js: Uses this component
@@ -53,7 +56,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
       if (googleLoaded && window.google && overlayButtonRef.current) {
         try {
           // Fetch client ID from API
-          const res = await fetch("/api/auth/google-client-id");
+          const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
           const { clientId } = await res.json();
           
           // Initialize with fetched client ID
@@ -61,7 +64,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
             client_id: clientId,
             callback: async (response: { credential: string }) => {
               try {
-                const res = await fetch('/api/auth/google', {
+                const res = await fetch(`${API_BASE_URL}/auth/google`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
