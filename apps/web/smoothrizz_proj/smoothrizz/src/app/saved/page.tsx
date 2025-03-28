@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, FC } from 'react';
 
 interface SavedResponse {
