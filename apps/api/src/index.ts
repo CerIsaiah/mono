@@ -26,6 +26,7 @@ const PORT = process.env.PORT || 4000;
 const allowedOrigins = [
   'http://localhost:3000',
   'https://smoothrizz.com',
+  'https://www.smoothrizz.com',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
