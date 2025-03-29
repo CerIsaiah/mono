@@ -9,42 +9,58 @@ const supabase = createClient(
 
 const router = Router();
 
-const MAX_LEARNING_PERCENTAGE = 100;
-const LEARNING_INCREMENT = 5;
+const MIN_LEARNING_PERCENTAGE = 0;
+const FREE_INCREMENT_PER_RESPONSE = 5;
+const PREMIUM_INCREMENT_PER_RESPONSE = 10;
+const FREE_MAX_PERCENTAGE = 50;
+const PREMIUM_MAX_PERCENTAGE = 100;
 
 router.get('/', async (req: Request, res: Response<LearningPercentageResponse>) => {
   try {
     const userEmail = req.headers['x-user-email'] as string | undefined;
 
-    // For anonymous users, return 0 percentage
     if (!userEmail) {
-      return res.json({ percentage: 0 });
+      return res.json({ percentage: MIN_LEARNING_PERCENTAGE });
     }
 
-    // Get user's total usage
-    const { data: user, error: userError } = await supabase
+    const { data: userData, error } = await supabase
       .from('users')
-      .select('total_usage')
+      .select('subscription_status, is_trial, trial_end_date, saved_responses')
       .eq('email', userEmail.toLowerCase().trim())
       .single();
 
-    if (userError) {
-      console.error('Error fetching user data:', userError);
-      return res.json({ percentage: 0 });
+    if (error) {
+      console.error('Error fetching user data:', error);
+      return res.json({ percentage: MIN_LEARNING_PERCENTAGE });
     }
 
-    // Calculate percentage based on total usage
-    const totalUsage = user?.total_usage || 0;
-    let percentage = totalUsage * LEARNING_INCREMENT;
-    
-    // Cap at maximum percentage
-    percentage = Math.min(percentage, MAX_LEARNING_PERCENTAGE);
+    const savedResponsesCount = userData?.saved_responses?.length ?? 0;
+    const now = new Date();
+    const hasActiveSubscription = 
+      userData?.subscription_status === 'active' || 
+      (userData?.is_trial && userData?.trial_end_date && new Date(userData.trial_end_date) > now);
 
-    res.json({ percentage });
+    const incrementPerResponse = hasActiveSubscription ? PREMIUM_INCREMENT_PER_RESPONSE : FREE_INCREMENT_PER_RESPONSE;
+    const maxPercentage = hasActiveSubscription ? PREMIUM_MAX_PERCENTAGE : FREE_MAX_PERCENTAGE;
+    
+    const percentage = Math.min(
+      savedResponsesCount * incrementPerResponse,
+      maxPercentage
+    );
+
+    res.json({
+      percentage: Math.max(percentage, MIN_LEARNING_PERCENTAGE),
+      savedResponsesCount,
+      debug: {
+        increment: incrementPerResponse,
+        max: maxPercentage,
+        calculated: savedResponsesCount * incrementPerResponse,
+        final: percentage
+      }
+    });
   } catch (error: any) {
     console.error('Error calculating learning percentage:', error);
-    // Return 0 percentage instead of error status for better UX
-    res.json({ percentage: 2 });
+    return res.json({ percentage: MIN_LEARNING_PERCENTAGE });
   }
 });
 

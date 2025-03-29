@@ -36,4 +36,11 @@ export interface SubscriptionStatus {
 
 export interface LearningPercentageResponse {
   percentage: number;
+  savedResponsesCount?: number;
+  debug?: {
+    increment: number;
+    max: number;
+    calculated: number;
+    final: number;
+  };
 } 
