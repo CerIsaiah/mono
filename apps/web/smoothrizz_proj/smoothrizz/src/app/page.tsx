@@ -184,7 +184,7 @@ export default function Home() {
     }
   }, [isSignedIn, user]);
 
-  // Single useEffect for initialization and auth state changes
+  // Update the useEffect that handles Google Sign-In initialization
   useEffect(() => {
     const storedUser = localStorage.getItem('smoothrizz_user');
     if (storedUser) {
@@ -195,8 +195,22 @@ export default function Home() {
       } catch (error) {
         console.error('Error parsing stored user data:', error);
         localStorage.removeItem('smoothrizz_user');
+        setIsSignedIn(false);
       }
+    } else {
+      setIsSignedIn(false);
     }
+
+    // Move Google button rendering to a separate function
+    const renderGoogleButton = () => {
+      if (googleButtonRef.current && window.google) {
+        googleButtonRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "outline",
+          size: "large",
+        });
+      }
+    };
 
     // Initialize Google Sign-In
     const initializeGoogleSignIn = async () => {
@@ -210,44 +224,31 @@ export default function Home() {
             console.log('Initializing Google Sign-In...');
             const res = await logConnection('/auth/google-client-id');
             const { clientId } = await res.json();
-            console.log('Google client ID received:', { 
-              clientId: clientId ? 'Present' : 'Missing',
-              timestamp: new Date().toISOString()
-            });
             
             if (!clientId) {
               throw new Error('No client ID received from server');
             }
 
-            // @ts-ignore - Google Sign-In types are not properly exposed
             window.google.accounts.id.initialize({
               client_id: clientId,
               callback: handleSignIn,
             });
-            if (googleButtonRef.current) {
-              // @ts-ignore - Google Sign-In types are not properly exposed
-              window.google.accounts.id.renderButton(googleButtonRef.current, {
-                theme: "outline",
-                size: "large",
-              });
-            }
+            
+            renderGoogleButton();
             setGoogleLoaded(true);
-            console.log('Google Sign-In initialized successfully');
+            
           } catch (err) {
-            console.error("Error initializing Google Sign-In:", {
-              error: err,
-              message: err instanceof Error ? err.message : 'Unknown error',
-              stack: err instanceof Error ? err.stack : undefined,
-              timestamp: new Date().toISOString()
-            });
+            console.error("Error initializing Google Sign-In:", err);
           }
         };
         document.body.appendChild(script);
+      } else {
+        renderGoogleButton();
       }
     };
 
     initializeGoogleSignIn();
-  }, []);
+  }, [isSignedIn]);
 
   // Update the handleSignIn function
   const handleSignIn = async (response: any) => {
