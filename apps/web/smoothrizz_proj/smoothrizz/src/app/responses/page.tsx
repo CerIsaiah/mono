@@ -132,7 +132,6 @@ export default function ResponsesPage() {
   const [usageCount, setUsageCount] = useState<number>(0);
   const [showUpgradePopup, setShowUpgradePopup] = useState<boolean>(false);
   const [isPremium, setIsPremium] = useState<boolean>(false);
-  const [googleLoaded, setGoogleLoaded] = useState<boolean>(false);
   const [showRegeneratePopup, setShowRegeneratePopup] = useState<boolean>(false);
   const [lastDirection, setLastDirection] = useState<string>();
   const router = useRouter();
@@ -559,12 +558,6 @@ export default function ResponsesPage() {
 
   return (
     <>
-      <Script
-        src="https://accounts.google.com/gsi/client"
-        strategy="lazyOnload"
-        onLoad={() => setGoogleLoaded(true)}
-      />
-
       <div className="min-h-screen bg-white">
         <div className="fixed inset-0 bg-gradient-to-br from-pink-500/5 via-white/50 to-gray-100/50 backdrop-blur-sm z-50 flex flex-col">
           {/* Close button - smaller and higher */}
@@ -715,7 +708,6 @@ export default function ResponsesPage() {
         
         {showSignInOverlay && !isSignedIn && (
           <GoogleSignInOverlay 
-            googleLoaded={googleLoaded}
             onClose={() => setShowSignInOverlay(false)}
             onSignInSuccess={() => {
               setShowSignInOverlay(false);
