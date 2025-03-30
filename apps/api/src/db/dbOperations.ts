@@ -7,10 +7,8 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { RESET_TIMEZONE } from './usageTracking';
-import { ANONYMOUS_USAGE_LIMIT, FREE_USER_DAILY_LIMIT, FREE_MAX_PERCENTAGE, MIN_LEARNING_PERCENTAGE } from '../shared/constants';
-import { 
-  SIGNED_IN_USAGE_LIMIT 
-} from '../shared/constants';
+import { ANONYMOUS_USAGE_LIMIT, FREE_USER_DAILY_LIMIT} from '../shared/constants';
+
 
 // Types
 export interface User {
