@@ -592,6 +592,9 @@ export default function ResponsesPage() {
         script.async = true;
         script.id = "google-client-script";
         script.onload = async () => {
+          // Set googleLoaded to true as soon as the script loads
+          setGoogleLoaded(true);
+          
           try {
             console.log('Initializing Google Sign-In...');
             const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
@@ -605,13 +608,14 @@ export default function ResponsesPage() {
               client_id: clientId,
               callback: handleSignIn,
             });
-            
-            setGoogleLoaded(true);
           } catch (err) {
             console.error("Error initializing Google Sign-In:", err);
           }
         };
         document.body.appendChild(script);
+      } else if (window.google) {
+        // If script already exists but we're not loaded, set loaded state
+        setGoogleLoaded(true);
       }
     };
 

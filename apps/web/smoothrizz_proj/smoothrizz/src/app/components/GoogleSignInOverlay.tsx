@@ -51,14 +51,16 @@ declare global {
 export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, preventReload = false }: GoogleSignInProps) {
   const overlayButtonRef = useRef<HTMLDivElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const initializeButton = async () => {
-      if (!googleLoaded || !window.google || !overlayButtonRef.current) {
+      if (!window.google || !overlayButtonRef.current) {
         return;
       }
 
       try {
+        setIsLoading(true);
         // Get client ID from environment variable or API
         const response = await fetch(`${API_BASE_URL}/auth/google-client-id`);
         const { clientId } = await response.json();
@@ -116,19 +118,23 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
             size: "large",
           });
         }
+        setIsLoading(false);
       } catch (error) {
         console.error('Error initializing Google Sign-In:', error);
+        setIsLoading(false);
       }
     };
 
-    initializeButton();
+    if (googleLoaded) {
+      initializeButton();
+    }
   }, [googleLoaded, onClose, onSignInSuccess, preventReload, isInitialized]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
       <div className="bg-white p-4 sm:p-8 rounded-xl w-full max-w-sm mx-auto flex flex-col items-center">
         <div ref={overlayButtonRef} className="min-h-[40px] flex items-center justify-center">
-          {!googleLoaded && (
+          {(isLoading || !googleLoaded) && (
             <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-900 border-t-transparent"></div>
           )}
         </div>
