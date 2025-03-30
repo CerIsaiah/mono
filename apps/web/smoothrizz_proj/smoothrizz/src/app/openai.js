@@ -38,14 +38,13 @@ export async function analyzeScreenshot(file, mode, isSignedIn, context = '', la
       const compressedFile = await compressImage(file, 800); // Max width 800px
       
       // Convert file to base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(compressedFile);
-      });
+      const base64 = await convertFileToBase64(compressedFile);
+      if (!base64) {
+        throw new Error('Failed to convert image to base64');
+      }
       requestBody.imageBase64 = base64;
     } catch (error) {
+      console.error('Error processing image:', error);
       throw new Error('Error processing image. Please try again.');
     }
   } else if (context || lastText) {
@@ -105,9 +104,29 @@ export function convertFileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => {
+      // Always return just the base64 data without the data URL prefix
+      const base64String = reader.result.split(',')[1];
+      resolve(base64String);
+    };
     reader.onerror = error => reject(error);
   });
+}
+
+// Add this helper function to extract base64 data from data URL
+export function extractBase64FromDataUrl(dataUrl) {
+  if (!dataUrl) return null;
+  try {
+    // Check if it's already just base64 data
+    if (!dataUrl.includes('data:')) {
+      return dataUrl;
+    }
+    // Extract base64 data from data URL
+    return dataUrl.split(',')[1];
+  } catch (error) {
+    console.error('Error extracting base64 from data URL:', error);
+    return null;
+  }
 }
 
 // Add this helper function to compress images

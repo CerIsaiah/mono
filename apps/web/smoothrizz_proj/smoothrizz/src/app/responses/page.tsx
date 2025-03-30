@@ -13,7 +13,7 @@ import {
 } from '../shared/constants';
 import { GoogleSignInOverlay } from '../components/GoogleSignInOverlay';
 import { UpgradePopup } from '../components/UpgradePopup';
-import { analyzeScreenshot } from '../openai';
+import { analyzeScreenshot, extractBase64FromDataUrl } from '../openai';
 
 // Add this near the top of the file, after imports
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
@@ -373,9 +373,33 @@ export default function ResponsesPage() {
 
   // Helper function to convert base64 to File
   const base64ToFile = async (base64String: string, filename: string): Promise<File> => {
-    const res = await fetch(base64String);
-    const blob = await res.blob();
-    return new File([blob], filename, { type: blob.type });
+    try {
+      // Extract base64 data if it's a data URL
+      const base64Data = extractBase64FromDataUrl(base64String);
+      if (!base64Data) {
+        throw new Error('Invalid base64 data');
+      }
+      
+      // Convert base64 to blob
+      const byteCharacters = atob(base64Data);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      const blob = new Blob(byteArrays, { type: 'image/png' });
+      return new File([blob], filename, { type: 'image/png' });
+    } catch (error) {
+      console.error('Error converting base64 to file:', error);
+      throw new Error('Failed to process the image. Please try uploading again.');
+    }
   };
 
   // Update handleRegenerate function

@@ -409,9 +409,17 @@ export default function Home() {
 
         if (selectedFile) {
           console.log('Converting file to base64...');
-          const base64File = await convertFileToBase64(selectedFile);
-          responseData.lastFile = base64File;
-          console.log('File conversion successful');
+          try {
+            const base64File = await convertFileToBase64(selectedFile);
+            if (!base64File) {
+              throw new Error('Failed to convert file to base64');
+            }
+            responseData.lastFile = base64File;
+            console.log('File conversion successful');
+          } catch (error) {
+            console.error('Error converting file to base64:', error);
+            throw new Error('Failed to process the image. Please try uploading again.');
+          }
         }
 
         console.log('Saving to localStorage:', {
