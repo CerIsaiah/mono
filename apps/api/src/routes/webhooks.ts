@@ -172,27 +172,58 @@ router.post('/', async (req: Request, res: Response) => {
         case 'customer.subscription.trial_will_end': {
             const subscription = event.data.object as Stripe.Subscription;
             const stripeCustomerId = subscription.customer as string;
-            console.log(`🔔 Trial ending soon for customer: ${stripeCustomerId}`);
+            console.log(`🔔 Trial ending soon for customer: ${stripeCustomerId}`, {
+                trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+                subscriptionId: subscription.id
+            });
 
             // Find user by Stripe customer ID
             const { data: user, error: userError } = await supabase
               .from('users')
-              .select('id') // Only select necessary field
+              .select('id, email, subscription_status, is_trial, trial_end_date') // Select more fields for better logging
               .eq('stripe_customer_id', stripeCustomerId)
-              .maybeSingle(); // Use maybeSingle in case customer ID is not found
+              .maybeSingle();
 
             if (userError) {
-              console.error(`Error finding user for trial_will_end webhook: ${userError.message}`);
+              console.error('Error finding user for trial_will_end webhook:', {
+                error: userError.message,
+                stripeCustomerId,
+                subscriptionId: subscription.id
+              });
+              // Don't throw error, just log it and continue
             } else if (user) {
-              // Update user record - Maybe add a flag or send a notification
-              // Example: Update a flag (ensure 'trial_ending_soon' column exists)
-              // await supabase
-              //   .from('users')
-              //   .update({ trial_ending_soon: true })
-              //   .eq('id', user.id);
-              console.log(`User ${user.id} notified (or marked) about trial ending soon.`);
+              // Update user record to indicate trial is ending soon
+              const { error: updateError } = await supabase
+                .from('users')
+                .update({ 
+                  trial_ending_notified: true,
+                  subscription_updated_at: new Date().toISOString()
+                })
+                .eq('id', user.id);
+
+              if (updateError) {
+                console.error('Failed to update user for trial ending notification:', {
+                  error: updateError.message,
+                  userId: user.id,
+                  userEmail: user.email
+                });
+              } else {
+                console.log('Successfully marked user as notified about trial ending:', {
+                  userId: user.id,
+                  userEmail: user.email,
+                  currentStatus: user.subscription_status,
+                  isTrial: user.is_trial,
+                  trialEndDate: user.trial_end_date
+                });
+              }
             } else {
-               console.warn(`User not found for Stripe customer ID ${stripeCustomerId} during trial_will_end event.`);
+              console.error('User not found for trial_will_end event:', {
+                stripeCustomerId,
+                subscriptionId: subscription.id,
+                trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+                status: subscription.status
+              });
+              // Don't throw error, just log it and continue
             }
             break;
         }

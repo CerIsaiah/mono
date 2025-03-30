@@ -87,7 +87,7 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
     console.log('Found user:', { userId: user.id, email: user.email });
 
     // Ensure URLs have https:// prefix
-    const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://smoothrizz.com';
+    const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || 'mono-production-8ef9.up.railway.app';
     const formattedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
     
     // Create Stripe checkout session
@@ -134,7 +134,11 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
       // customer: user.stripe_customer_id || undefined, // Use existing customer if available
     });
 
-    console.log('Checkout session created:', session.id);
+    console.log('Checkout session created:', {
+      id: session.id,
+      success_url: session.success_url,
+      cancel_url: session.cancel_url
+    });
     res.json({ url: session.url });
 
   } catch (error: any) {
