@@ -3,6 +3,9 @@ import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
 
+// Log when the route file is loaded
+logger.info('Cancel subscription route file loaded');
+
 // Initialize Stripe only if API key is available
 let stripe: Stripe | null = null;
 if (process.env.STRIPE_SECRET_KEY) {
@@ -35,13 +38,27 @@ interface CancelSubscriptionBody {
     userId?: string; // Allow canceling by user ID as well
 }
 
+// Add middleware to log all requests to this route
+router.use((req: Request, res: Response, next) => {
+  logger.info('Incoming request to cancel subscription route', {
+    method: req.method,
+    path: req.path,
+    body: req.body,
+    headers: {
+      'content-type': req.headers['content-type'],
+      origin: req.headers.origin
+    }
+  });
+  next();
+});
 
 router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Response) => {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   logger.info('Starting subscription cancellation request', {
     requestId,
     userEmail: req.body.userEmail,
-    userId: req.body.userId
+    userId: req.body.userId,
+    rawBody: req.body // Add this to see what's coming in
   });
 
   try {

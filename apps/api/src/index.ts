@@ -46,6 +46,17 @@ app.use(cors({
   credentials: true
 }));
 
+// Add request logging middleware
+app.use((req, res, next) => {
+  logger.info('Incoming request', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin,
+    contentType: req.headers['content-type']
+  });
+  next();
+});
+
 // IMPORTANT: Use express.raw() for the webhook BEFORE express.json()
 // Stripe requires the raw body to verify webhook signatures.
 app.use('/api/webhooks', express.raw({ type: 'application/json' }));
@@ -72,6 +83,9 @@ app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Smoothrizz API' });
 });
 
+// Log route mounting
+logger.info('Mounting routes...');
+
 // Mount your routes
 app.use('/api', openaiRouter);
 app.use('/auth', authRouter);
@@ -83,6 +97,21 @@ app.use('/api/learning-percentage', learningPercentageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/cancel-subscription', cancelSubscriptionRouter);
+
+logger.info('Routes mounted', {
+  routes: [
+    '/api',
+    '/auth',
+    '/api/usage',
+    '/api/swipes',
+    '/api/saved-responses',
+    '/api/subscription',
+    '/api/learning-percentage',
+    '/api/checkout',
+    '/api/webhooks',
+    '/api/cancel-subscription'
+  ]
+});
 
 app.listen(PORT, () => {
   logger.info('Server started', { port: PORT });
