@@ -117,8 +117,8 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
         //   user_id: user.id,
         // }
       },
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/?success=true`, // Assuming NEXT_PUBLIC_BASE_URL is accessible or replaced
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/?canceled=true`, // Assuming NEXT_PUBLIC_BASE_URL is accessible or replaced
+      success_url: `https://${process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '')}/?success=true`,
+      cancel_url: `https://${process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '')}/?canceled=true`,
       // Use customer_email OR customer, not both if creating a new customer implicitly
       customer_email: user.email,
        // Link checkout session to user for webhook processing
