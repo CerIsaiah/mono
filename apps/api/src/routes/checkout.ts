@@ -86,8 +86,9 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
 
     console.log('Found user:', { userId: user.id, email: user.email });
 
-    // Always use the frontend URL for success/cancel redirects
-    const frontendUrl = 'https://smoothrizz.com'; // Production frontend URL
+    // Ensure URLs have https:// prefix
+    const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://smoothrizz.com';
+    const formattedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
     
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
@@ -120,8 +121,8 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
         //   user_id: user.id,
         // }
       },
-      success_url: `${frontendUrl}/?success=true`,
-      cancel_url: `${frontendUrl}/?canceled=true`,
+      success_url: `${formattedBaseUrl}/?success=true`,
+      cancel_url: `${formattedBaseUrl}/?canceled=true`,
       // Use customer_email OR customer, not both if creating a new customer implicitly
       customer_email: user.email,
        // Link checkout session to user for webhook processing
