@@ -12,6 +12,24 @@ import webhooksRouter from './routes/webhooks';
 import cancelSubscriptionRouter from './routes/cancelSubscription';
 import { logger } from './utils/logger';
 
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', {
+    error: {
+      message: error.message,
+      stack: error.stack
+    }
+  });
+  // Give the logger time to flush
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection', {
+    reason,
+    promise
+  });
+});
+
 // Debug log for environment
 logger.info('Environment Check', {
   environment: process.env.NODE_ENV,
@@ -113,6 +131,16 @@ logger.info('Routes mounted', {
   ]
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info('Server started', { port: PORT });
+}).on('error', (error: NodeJS.ErrnoException) => {
+  logger.error('Failed to start server', {
+    error: {
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    }
+  });
+  // Give the logger time to flush
+  setTimeout(() => process.exit(1), 1000);
 }); 
