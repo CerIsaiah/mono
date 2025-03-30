@@ -27,8 +27,10 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-produc
 
 // Helper function to validate base64
 function isValidBase64(str) {
+  if (!str) return false;
   try {
-    return /^[A-Za-z0-9+/=]+$/.test(str);
+    // More lenient regex that allows for potential padding characters
+    return /^[A-Za-z0-9+/]*={0,2}$/.test(str);
   } catch (e) {
     return false;
   }
@@ -135,12 +137,38 @@ export async function analyzeScreenshot(file, mode, isSignedIn, context = '', la
 // Helper function to convert File to base64
 export function convertFileToBase64(file) {
   return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('No file provided'));
+      return;
+    }
+    
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
-      // Always return just the base64 data without the data URL prefix
-      const base64String = reader.result.split(',')[1];
-      resolve(base64String);
+      try {
+        // Always return just the base64 data without the data URL prefix
+        const result = reader.result;
+        if (!result) {
+          reject(new Error('Failed to read file'));
+          return;
+        }
+        
+        const parts = result.split(',');
+        if (parts.length !== 2) {
+          reject(new Error('Invalid data URL format'));
+          return;
+        }
+        
+        const base64String = parts[1];
+        if (!base64String || !isValidBase64(base64String)) {
+          reject(new Error('Invalid base64 data'));
+          return;
+        }
+        
+        resolve(base64String);
+      } catch (error) {
+        reject(new Error(`Error processing file: ${error.message}`));
+      }
     };
     reader.onerror = error => reject(error);
   });
@@ -155,7 +183,12 @@ export function extractBase64FromDataUrl(dataUrl) {
       return dataUrl;
     }
     // Extract base64 data from data URL
-    return dataUrl.split(',')[1];
+    const parts = dataUrl.split(',');
+    if (parts.length !== 2) {
+      console.error('Invalid data URL format');
+      return null;
+    }
+    return parts[1];
   } catch (error) {
     console.error('Error extracting base64 from data URL:', error);
     return null;
