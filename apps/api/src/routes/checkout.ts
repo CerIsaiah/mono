@@ -87,7 +87,7 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
     console.log('Found user:', { userId: user.id, email: user.email });
 
     // Always use the frontend URL for success/cancel redirects
-    const frontendUrl = 'https://www.smoothrizz.com'; // Production frontend URL
+    const frontendUrl = 'https://smoothrizz.com'; // Production frontend URL
     
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
