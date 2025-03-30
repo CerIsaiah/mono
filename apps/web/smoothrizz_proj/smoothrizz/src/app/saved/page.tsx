@@ -27,10 +27,13 @@ interface User {
 }
 
 interface SubscriptionDetails {
+  type: string | null;
   isTrialActive: boolean;
-  trialEndsAt?: string;
-  subscriptionEndsAt?: string;
-  hadTrial?: boolean;
+  trialEndsAt: string | null;
+  subscriptionEndsAt: string | null;
+  hadTrial: boolean;
+  isCanceled: boolean;
+  canceledDuringTrial: boolean;
 }
 
 type GoogleAccount = {
@@ -57,7 +60,7 @@ export default function SavedResponses() {
   const [copySuccess, setCopySuccess] = useState(false);
   const [matchPercentage, setMatchPercentage] = useState(MIN_LEARNING_PERCENTAGE);
   const router = useRouter();
-  const [subscriptionStatus, setSubscriptionStatus] = useState<'free' | 'trial' | 'premium' | 'trial-canceling'>('free');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'free' | 'trial' | 'premium' | 'trial-canceling' | 'canceling'>('free');
 
   useEffect(() => {
     // Check if user is logged in
@@ -69,12 +72,18 @@ export default function SavedResponses() {
     const fetchSubscriptionStatus = async () => {
       if (user?.email) {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/subscription-status?userEmail=${user.email}`);
+          const response = await fetch(`${API_BASE_URL}/api/subscription-status?userEmail=${encodeURIComponent(user.email)}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch subscription status');
+          }
           const data = await response.json();
           setSubscriptionStatus(data.status);
           setSubscriptionDetails(data.details);
         } catch (error) {
           console.error('Error fetching subscription status:', error);
+          // Reset to default state on error
+          setSubscriptionStatus('free');
+          setSubscriptionDetails(null);
         }
       }
       setIsLoading(false);
@@ -197,7 +206,7 @@ export default function SavedResponses() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/checkout_sessions`, {
+      const response = await fetch(`${API_BASE_URL}/api/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -229,7 +238,7 @@ export default function SavedResponses() {
     setShowConfirmCancelModal(false);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/cancel-subscription`, {
+      const response = await fetch(`${API_BASE_URL}/api/cancelSubscription`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -257,7 +266,7 @@ export default function SavedResponses() {
     }
   };
 
-  const formatTimeRemaining = (endDate: string | undefined) => {
+  const formatTimeRemaining = (endDate: string | null) => {
     if (!endDate) return null;
     const end = new Date(endDate);
     const now = new Date();
@@ -603,7 +612,7 @@ export default function SavedResponses() {
                           Trial Active
                         </p>
                         <p className="text-xs text-gray-400 mt-1">
-                          {formatTimeRemaining(subscriptionDetails?.trialEndsAt)} days remaining in trial
+                          {subscriptionDetails?.trialEndsAt ? `${formatTimeRemaining(subscriptionDetails.trialEndsAt)} days remaining in trial` : 'Trial period active'}
                         </p>
                       </>
                     ) : subscriptionStatus === 'premium' ? (
@@ -612,10 +621,24 @@ export default function SavedResponses() {
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                           </svg>
-                          Premium Member
+                          {subscriptionDetails?.isCanceled ? 'Premium (Canceling)' : 'Premium Member'}
                         </p>
                         <p className="text-xs text-gray-400 mt-1">
-                          Enjoying unlimited access!
+                          {subscriptionDetails?.isCanceled 
+                            ? `Access until ${new Date(subscriptionDetails.subscriptionEndsAt!).toLocaleDateString()}`
+                            : 'Enjoying unlimited access!'}
+                        </p>
+                      </>
+                    ) : subscriptionStatus === 'trial-canceling' ? (
+                      <>
+                        <p className="flex items-center gap-2 text-pink-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                          </svg>
+                          Trial (Canceling)
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Access until {subscriptionDetails?.trialEndsAt ? new Date(subscriptionDetails.trialEndsAt).toLocaleDateString() : 'trial end'}
                         </p>
                       </>
                     ) : (
@@ -630,14 +653,14 @@ export default function SavedResponses() {
                     )}
                   </div>
                   
-                  {(subscriptionStatus === 'premium' || subscriptionStatus === 'trial') ? (
+                  {(subscriptionStatus === 'premium' || subscriptionStatus === 'trial') && !subscriptionDetails?.isCanceled ? (
                     <button
                       onClick={handleCancelSubscription}
                       className="px-4 py-2 rounded-full text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"
                     >
                       Cancel Subscription
                     </button>
-                  ) : (
+                  ) : subscriptionStatus === 'free' && (
                     <button
                       onClick={handleCheckout}
                       className="px-4 py-2 rounded-full text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 transition-colors"
