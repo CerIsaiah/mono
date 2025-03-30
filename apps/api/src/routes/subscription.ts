@@ -86,8 +86,14 @@ router.get('/status', async (req: Request, res: Response) => {
       const trialEndDate = user.trial_end_date ? new Date(user.trial_end_date) : null;
       const subscriptionEndDate = user.subscription_end_date ? new Date(user.subscription_end_date) : null;
 
-      // Check if trial is active
-      if (user.is_trial && trialEndDate && trialEndDate > now) {
+      // First check if user has an active premium subscription
+      if (user.subscription_status === 'active' && user.subscription_type === 'premium') {
+        status = 'premium';
+        details.type = 'premium';
+        details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
+      }
+      // Then check if trial is active
+      else if (user.is_trial && trialEndDate && trialEndDate > now) {
         status = user.cancel_at_period_end ? 'trial-canceling' : 'trial';
         details.type = 'premium'; // Trial users get premium features
         details.isTrialActive = true;
@@ -150,15 +156,10 @@ router.get('/status', async (req: Request, res: Response) => {
           }
         }
       }
-      // For users without Stripe customer ID, just use the database status
-      else {
-        if (user.subscription_status === 'active') {
-          status = 'premium';
-          details.type = 'premium';
-        } else if (user.subscription_status === 'canceling') {
-          status = 'canceling';
-          details.type = 'premium';
-        }
+      // For users without Stripe customer ID, check if they're canceling
+      else if (user.subscription_status === 'canceling') {
+        status = 'canceling';
+        details.type = 'premium';
       }
 
       // Set hadTrial after all status checks
