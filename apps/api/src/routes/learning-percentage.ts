@@ -1,6 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { LearningPercentageResponse } from '../types/api';
+import {
+  MIN_LEARNING_PERCENTAGE,
+  FREE_INCREMENT_PER_RESPONSE,
+  PREMIUM_INCREMENT_PER_RESPONSE,
+  FREE_MAX_PERCENTAGE,
+  PREMIUM_MAX_PERCENTAGE
+} from '../shared/constants';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -8,12 +15,6 @@ const supabase = createClient(
 );
 
 const router = Router();
-
-const MIN_LEARNING_PERCENTAGE = 0;
-const FREE_INCREMENT_PER_RESPONSE = 5;
-const PREMIUM_INCREMENT_PER_RESPONSE = 10;
-const FREE_MAX_PERCENTAGE = 50;
-const PREMIUM_MAX_PERCENTAGE = 100;
 
 router.get('/', async (req: Request, res: Response<LearningPercentageResponse>) => {
   try {

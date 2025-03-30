@@ -9,7 +9,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { UpgradePopup } from './components/UpgradePopup';
-import { convertFileToBase64 } from '@/utils/usageTracking';
+import { convertFileToBase64 } from '@api/db/usageTracking';
 import { Analytics } from "@vercel/analytics/react"
 
 // Types
@@ -584,7 +584,7 @@ export default function Home() {
 
       console.log('Starting checkout process for user:', user.email);
 
-      const response = await fetch(`${API_BASE_URL}/api/checkout_sessions`, {
+      const response = await fetch(`${API_BASE_URL}/api/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -597,11 +597,18 @@ export default function Home() {
       const data = await response.json();
       
       if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 400 && data.error?.includes('Trial period')) {
+          alert('You have already used your trial period.');
+          return;
+        }
         throw new Error(data.error || 'Failed to create checkout session');
       }
 
       if (data.url) {
         window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
       }
     } catch (error) {
       console.error('Checkout error:', error);

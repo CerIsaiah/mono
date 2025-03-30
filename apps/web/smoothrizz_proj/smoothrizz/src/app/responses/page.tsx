@@ -9,7 +9,7 @@ import {
   FREE_INCREMENT_PER_RESPONSE,
   FREE_MAX_PERCENTAGE,
   MIN_LEARNING_PERCENTAGE
-} from '../constants';
+} from '@api/shared/constants';
 import { GoogleSignInOverlay } from '../components/GoogleSignInOverlay';
 import { UpgradePopup } from '../components/UpgradePopup';
 import { analyzeScreenshot } from '../openai';
@@ -482,7 +482,7 @@ export default function ResponsesPage() {
 
   const handleCheckout = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/checkout_sessions`, {
+      const response = await fetch(`${API_BASE_URL}/api/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
