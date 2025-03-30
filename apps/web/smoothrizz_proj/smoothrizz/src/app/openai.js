@@ -101,7 +101,7 @@ export async function analyzeScreenshot(file, mode, isSignedIn, context = '', la
 }
 
 // Helper function to convert File to base64
-function convertFileToBase64(file) {
+export function convertFileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);

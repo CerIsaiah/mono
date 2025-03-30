@@ -8,7 +8,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { UpgradePopup } from './components/UpgradePopup';
-import { convertFileToBase64 } from '@api/db/usageTracking';
+import { convertFileToBase64 } from './openai';
 import { Analytics } from "@vercel/analytics/react"
 
 // Types
