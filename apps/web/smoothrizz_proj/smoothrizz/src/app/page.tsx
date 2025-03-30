@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import Head from "next/head";
 import { Upload } from "lucide-react";
 import Script from "next/script";
-import { loadStripe } from '@stripe/stripe-js';
 import { ANONYMOUS_USAGE_LIMIT, FREE_USER_DAILY_LIMIT } from './constants';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -42,8 +41,7 @@ interface ResponseData {
   lastFile?: string;
 }
 
-// Make sure to call `loadStripe` outside of a component's render
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
+
 
 // Add this near the top of the file, after imports
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
