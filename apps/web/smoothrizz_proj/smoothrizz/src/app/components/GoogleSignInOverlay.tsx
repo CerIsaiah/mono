@@ -55,45 +55,42 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
     const initializeButton = async () => {
       if (googleLoaded && window.google && overlayButtonRef.current) {
         try {
-          // Fetch client ID from API
-          const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-          const { clientId } = await res.json();
+          // Get client ID from environment variable
+          const clientId = process.env.GOOGLE_CLIENT_ID;
           
-          // Initialize with fetched client ID
+          if (!clientId) {
+            throw new Error('Google Client ID not found in environment variables');
+          }
+          
           window.google.accounts.id.initialize({
             client_id: clientId,
             callback: async (response: { credential: string }) => {
               try {
-                const res = await fetch(`${API_BASE_URL}/auth/google`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ credential: response.credential }),
-                });
+                // Store user data based on the credential
+                const token = response.credential;
+                const payload = JSON.parse(atob(token.split('.')[1]));
                 
-                if (res.ok) {
-                  const data: GoogleAuthResponse = await res.json();
-                  
-                  // Store user data in localStorage
-                  localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
-                  
-                  // Call onSignInSuccess if provided
-                  if (onSignInSuccess) {
-                    onSignInSuccess(data);
-                  }
-                  
-                  // Close the overlay after successful sign-in
-                  if (onClose) onClose();
-                  
-                  // Only reload if not prevented
-                  if (!preventReload) {
-                    window.location.reload();
-                  }
-                } else {
-                  const errorData = await res.json();
-                  console.error('Sign-in error:', errorData);
-                  alert('Failed to sign in. Please try again.');
+                // Extract user info from the token payload
+                const user = {
+                  email: payload.email,
+                  name: payload.name,
+                  picture: payload.picture
+                };
+                
+                // Store user data in localStorage
+                localStorage.setItem('smoothrizz_user', JSON.stringify(user));
+                
+                // Call onSignInSuccess if provided
+                if (onSignInSuccess) {
+                  onSignInSuccess({ user, credential: response.credential } as GoogleAuthResponse);
+                }
+                
+                // Close the overlay after successful sign-in
+                if (onClose) onClose();
+                
+                // Only reload if not prevented
+                if (!preventReload) {
+                  window.location.reload();
                 }
               } catch (error) {
                 console.error('Sign-in error:', error);
