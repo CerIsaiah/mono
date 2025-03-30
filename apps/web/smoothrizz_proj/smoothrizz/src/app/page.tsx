@@ -551,7 +551,7 @@ export default function Home() {
     const checkSubscriptionStatus = async () => {
       if (isSignedIn && user?.email) {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/subscription-status?userEmail=${encodeURIComponent(user.email)}`);
+          const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
           const data = await response.json();
           
           // Update isPremium based on both premium and trial status

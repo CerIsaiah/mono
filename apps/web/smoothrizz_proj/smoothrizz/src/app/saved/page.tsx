@@ -72,7 +72,7 @@ export default function SavedResponses() {
     const fetchSubscriptionStatus = async () => {
       if (user?.email) {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/subscription-status?userEmail=${encodeURIComponent(user.email)}`);
+          const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
           if (!response.ok) {
             throw new Error('Failed to fetch subscription status');
           }
@@ -252,7 +252,7 @@ export default function SavedResponses() {
         throw new Error(data.error || 'Failed to cancel subscription');
       }
 
-      const statusResponse = await fetch(`${API_BASE_URL}/api/subscription-status?userEmail=${encodeURIComponent(user.email)}`);
+      const statusResponse = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
       const statusData = await statusResponse.json();
       setSubscriptionStatus(statusData.status);
       setSubscriptionDetails(statusData.details);

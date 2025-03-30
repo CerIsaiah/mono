@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
-import { ParsedQs } from 'qs';
 
 // Initialize Stripe only if API key is available
 let stripe: Stripe | null = null;
@@ -30,7 +29,7 @@ interface SubscriptionDetails {
   canceledDuringTrial: boolean;
 }
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/status', async (req: Request, res: Response) => {
   try {
     const userId = req.query.userId as string;
     const userEmail = typeof req.query.userEmail === 'string' 
@@ -80,7 +79,7 @@ router.get('/', async (req: Request, res: Response) => {
       canceledDuringTrial: false
     };
 
-    let status: 'active' | 'inactive' = 'inactive';
+    let status: 'free' | 'trial' | 'trial-canceling' | 'premium' | 'canceling' = 'free';
 
     if (user) {
       const now = new Date();
@@ -89,7 +88,7 @@ router.get('/', async (req: Request, res: Response) => {
 
       // Check if trial is active
       if (user.is_trial && trialEndDate && trialEndDate > now) {
-        status = 'active';
+        status = user.cancel_at_period_end ? 'trial-canceling' : 'trial';
         details.type = 'premium'; // Trial users get premium features
         details.isTrialActive = true;
         details.trialEndsAt = trialEndDate.toISOString();
@@ -122,12 +121,13 @@ router.get('/', async (req: Request, res: Response) => {
             });
 
             if (subscriptions.data.length > 0) {
-              status = 'active';
+              status = 'premium';
               details.type = 'premium';
               details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
               
               if (subscriptions.data[0].cancel_at) {
                 details.isCanceled = true;
+                status = 'canceling';
               }
             }
           }
@@ -152,7 +152,11 @@ router.get('/', async (req: Request, res: Response) => {
       }
       // For users without Stripe customer ID, just use the database status
       else {
-        status = user.subscription_status === 'active' ? 'active' : 'inactive';
+        if (user.subscription_status === 'active') {
+          status = 'premium';
+        } else if (user.subscription_status === 'canceling') {
+          status = 'canceling';
+        }
         details.type = user.subscription_type as 'standard' | 'premium' || 'standard';
       }
     }

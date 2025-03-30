@@ -10,7 +10,6 @@ import learningPercentageRouter from './routes/learning-percentage';
 import checkoutRouter from './routes/checkout';
 import webhooksRouter from './routes/webhooks';
 import cancelSubscriptionRouter from './routes/cancelSubscription';
-import subscriptionStatusRoutes from './routes/subscription';
 
 // Debug log for environment
 console.log('Environment Check:', {
@@ -65,12 +64,12 @@ app.use('/auth', authRouter);
 app.use('/api/usage', usageRouter);
 app.use('/api/swipes', swipesRouter);
 app.use('/api/saved-responses', savedResponsesRouter);
-app.use('/api/subscription-status', subscriptionRouter);
+app.use('/api/subscription', subscriptionRouter);
 app.use('/api/learning-percentage', learningPercentageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/cancel-subscription', cancelSubscriptionRouter);
-app.use('/api/subscription-status', subscriptionStatusRoutes);
+
 app.listen(PORT, () => {
   console.log(`✅ API running on port ${PORT}`);
 }); 
