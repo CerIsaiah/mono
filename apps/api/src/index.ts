@@ -114,7 +114,7 @@ app.use('/api/subscription', subscriptionRouter);
 app.use('/api/learning-percentage', learningPercentageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/webhooks', webhooksRouter);
-app.use('/api/cancel-subscription', cancelSubscriptionRouter);
+app.use('/api/cancelSubscription', cancelSubscriptionRouter);
 
 logger.info('Routes mounted', {
   routes: [
@@ -127,8 +127,19 @@ logger.info('Routes mounted', {
     '/api/learning-percentage',
     '/api/checkout',
     '/api/webhooks',
-    '/api/cancel-subscription'
+    '/api/cancelSubscription'
   ]
+});
+
+// Add 404 handler after all routes
+app.use((req, res, next) => {
+  logger.warn('Route not found', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin,
+    contentType: req.headers['content-type']
+  });
+  res.status(404).json({ error: 'Route not found' });
 });
 
 const server = app.listen(PORT, () => {
