@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GoogleSignInProps, GoogleAuthResponse } from '../types/auth';
 
 // Add this near the top of the file
@@ -52,10 +52,20 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
   const overlayButtonRef = useRef<HTMLDivElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const buttonContainerRef = useRef<HTMLDivElement>(null);
+
+  // Cleanup function to safely remove button
+  const cleanupButton = useCallback(() => {
+    if (buttonContainerRef.current) {
+      while (buttonContainerRef.current.firstChild) {
+        buttonContainerRef.current.removeChild(buttonContainerRef.current.firstChild);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const initializeButton = async () => {
-      if (!window.google || !overlayButtonRef.current) {
+      if (!window.google || !buttonContainerRef.current) {
         return;
       }
 
@@ -110,14 +120,15 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
           setIsInitialized(true);
         }
 
-        // Always try to render the button when the ref is available
-        if (overlayButtonRef.current) {
-          overlayButtonRef.current.innerHTML = "";
-          window.google.accounts.id.renderButton(overlayButtonRef.current, {
-            theme: "outline",
-            size: "large",
-          });
-        }
+        // Safely cleanup existing button before rendering new one
+        cleanupButton();
+
+        // Render the button in the container
+        window.google.accounts.id.renderButton(buttonContainerRef.current, {
+          theme: "outline",
+          size: "large",
+        });
+        
         setIsLoading(false);
       } catch (error) {
         console.error('Error initializing Google Sign-In:', error);
@@ -128,14 +139,21 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
     if (googleLoaded) {
       initializeButton();
     }
-  }, [googleLoaded, onClose, onSignInSuccess, preventReload, isInitialized]);
+
+    // Cleanup on unmount
+    return () => {
+      cleanupButton();
+    };
+  }, [googleLoaded, onClose, onSignInSuccess, preventReload, isInitialized, cleanupButton]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
       <div className="bg-white p-4 sm:p-8 rounded-xl w-full max-w-sm mx-auto flex flex-col items-center">
-        <div ref={overlayButtonRef} className="min-h-[40px] flex items-center justify-center">
-          {(isLoading || !googleLoaded) && (
+        <div className="min-h-[40px] flex items-center justify-center">
+          {(isLoading || !googleLoaded) ? (
             <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-900 border-t-transparent"></div>
+          ) : (
+            <div ref={buttonContainerRef} className="min-h-[40px] flex items-center justify-center" />
           )}
         </div>
         <p className="mt-4 text-center text-sm sm:text-base">
