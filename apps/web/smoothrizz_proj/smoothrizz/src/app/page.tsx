@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import Head from "next/head";
 import { Upload } from "lucide-react";
 import Script from "next/script";
-import { ANONYMOUS_USAGE_LIMIT, FREE_USER_DAILY_LIMIT } from './constants';
+import { ANONYMOUS_USAGE_LIMIT, FREE_USER_DAILY_LIMIT } from './shared/constants';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';

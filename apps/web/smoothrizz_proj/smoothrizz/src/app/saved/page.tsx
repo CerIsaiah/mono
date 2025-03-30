@@ -3,13 +3,7 @@
 import { useState, useEffect, FC, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  PREMIUM_INCREMENT_PER_RESPONSE,
-  FREE_INCREMENT_PER_RESPONSE,
-  PREMIUM_MAX_PERCENTAGE,
-  FREE_MAX_PERCENTAGE,
-  MIN_LEARNING_PERCENTAGE,
-} from '../constants';
+import { MIN_LEARNING_PERCENTAGE } from '../shared/constants';
 
 // Add API base URL constant
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
