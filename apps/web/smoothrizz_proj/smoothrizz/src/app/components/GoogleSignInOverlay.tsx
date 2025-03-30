@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GoogleSignInProps, GoogleAuthResponse } from '../types/auth';
 
 // Add this near the top of the file
@@ -50,18 +50,25 @@ declare global {
 
 export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, preventReload = false }: GoogleSignInProps) {
   const overlayButtonRef = useRef<HTMLDivElement>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     const initializeButton = async () => {
-      if (googleLoaded && window.google && overlayButtonRef.current) {
-        try {
-          // Get client ID from environment variable
-          const clientId = process.env.GOOGLE_CLIENT_ID || "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
+      if (!googleLoaded || !window.google || !overlayButtonRef.current) {
+        return;
+      }
+
+      try {
+        // Get client ID from environment variable or API
+        const response = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+        const { clientId } = await response.json();
           
-          if (!clientId) {
-            throw new Error('Google Client ID not found in environment variables');
-          }
-          
+        if (!clientId) {
+          throw new Error('No client ID received from server');
+        }
+        
+        // Only initialize if not already initialized
+        if (!isInitialized) {
           window.google.accounts.id.initialize({
             client_id: clientId,
             callback: async (response: { credential: string }) => {
@@ -98,26 +105,33 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
               }
             }
           });
+          setIsInitialized(true);
+        }
 
-          // Render the button
+        // Always try to render the button when the ref is available
+        if (overlayButtonRef.current) {
           overlayButtonRef.current.innerHTML = "";
           window.google.accounts.id.renderButton(overlayButtonRef.current, {
             theme: "outline",
             size: "large",
           });
-        } catch (error) {
-          console.error('Error initializing Google Sign-In:', error);
         }
+      } catch (error) {
+        console.error('Error initializing Google Sign-In:', error);
       }
     };
 
     initializeButton();
-  }, [googleLoaded, onClose, onSignInSuccess, preventReload]);
+  }, [googleLoaded, onClose, onSignInSuccess, preventReload, isInitialized]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
       <div className="bg-white p-4 sm:p-8 rounded-xl w-full max-w-sm mx-auto flex flex-col items-center">
-        <div ref={overlayButtonRef}></div>
+        <div ref={overlayButtonRef} className="min-h-[40px] flex items-center justify-center">
+          {!googleLoaded && (
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-900 border-t-transparent"></div>
+          )}
+        </div>
         <p className="mt-4 text-center text-sm sm:text-base">
           Please sign in with Google to view your saved responses/generate more.
         </p>
