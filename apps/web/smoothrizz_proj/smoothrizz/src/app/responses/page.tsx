@@ -572,6 +572,11 @@ export default function ResponsesPage() {
       setUser(user);
       setIsSignedIn(true);
       setShowSignInOverlay(false);
+
+      // Check if we need to redirect to home after sign in
+      if (usageCount >= ANONYMOUS_USAGE_LIMIT) {
+        router.push('/');
+      }
     } catch (error) {
       console.error('Sign-in error:', error);
       alert('Failed to sign in. Please try again.');
