@@ -56,7 +56,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
       if (googleLoaded && window.google && overlayButtonRef.current) {
         try {
           // Get client ID from environment variable
-          const clientId = process.env.GOOGLE_CLIENT_ID;
+          const clientId = process.env.GOOGLE_CLIENT_ID || "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
           
           if (!clientId) {
             throw new Error('Google Client ID not found in environment variables');
