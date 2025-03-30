@@ -75,7 +75,7 @@ router.get('/status', async (req: Request, res: Response) => {
       trialEndsAt: null,
       subscriptionEndsAt: null,
       isCanceled: user?.cancel_at_period_end || false,
-      hadTrial: !!user?.trial_started_at,
+      hadTrial: false,
       canceledDuringTrial: false
     };
 
@@ -94,7 +94,7 @@ router.get('/status', async (req: Request, res: Response) => {
         details.trialEndsAt = trialEndDate.toISOString();
         details.canceledDuringTrial = user.cancel_at_period_end;
       }
-      // Only check Stripe if user has a customer ID (meaning they started a trial)
+      // Only check Stripe if user has a customer ID
       else if (user.stripe_customer_id && stripe) {
         try {
           const customer = await stripe.customers.retrieve(user.stripe_customer_id);
@@ -154,11 +154,15 @@ router.get('/status', async (req: Request, res: Response) => {
       else {
         if (user.subscription_status === 'active') {
           status = 'premium';
+          details.type = 'premium';
         } else if (user.subscription_status === 'canceling') {
           status = 'canceling';
+          details.type = 'premium';
         }
-        details.type = user.subscription_type as 'standard' | 'premium' || 'standard';
       }
+
+      // Set hadTrial after all status checks
+      details.hadTrial = status === 'free' && !!user.trial_started_at;
     }
 
     res.json({
