@@ -3,13 +3,14 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useRouter } from 'next/navigation';
 import TinderCard from 'react-tinder-card';
 import Script from 'next/script';
-import { 
-  ANONYMOUS_USAGE_LIMIT, 
+import {
+  ANONYMOUS_USAGE_LIMIT,
   FREE_USER_DAILY_LIMIT,
+  PREMIUM_USER_DAILY_LIMIT,
   FREE_INCREMENT_PER_RESPONSE,
   FREE_MAX_PERCENTAGE,
   MIN_LEARNING_PERCENTAGE
-} from '@api/shared/constants';
+} from '../shared/constants';
 import { GoogleSignInOverlay } from '../components/GoogleSignInOverlay';
 import { UpgradePopup } from '../components/UpgradePopup';
 import { analyzeScreenshot } from '../openai';

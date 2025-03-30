@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { getFormattedTimeUntilReset } from '@api/db/usageTracking';
+import { getFormattedTimeUntilReset } from '../utils/timeUtils';
 
 // Constants
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';

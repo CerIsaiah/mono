@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useRef } from 'react';
-import { GoogleSignInProps, GoogleAuthResponse } from '@api/types/auth';
+import { GoogleSignInProps, GoogleAuthResponse } from '../types/auth';
 
 // Add this near the top of the file
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
@@ -80,7 +80,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                   
                   // Call onSignInSuccess if provided
                   if (onSignInSuccess) {
-                    onSignInSuccess();
+                    onSignInSuccess(data);
                   }
                   
                   // Close the overlay after successful sign-in
