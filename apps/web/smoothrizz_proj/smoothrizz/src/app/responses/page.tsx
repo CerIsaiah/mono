@@ -6,7 +6,6 @@ import Script from 'next/script';
 import {
   ANONYMOUS_USAGE_LIMIT,
   FREE_USER_DAILY_LIMIT,
-  PREMIUM_USER_DAILY_LIMIT,
   FREE_INCREMENT_PER_RESPONSE,
   FREE_MAX_PERCENTAGE,
   MIN_LEARNING_PERCENTAGE
@@ -134,7 +133,6 @@ export default function ResponsesPage() {
   const [isPremium, setIsPremium] = useState<boolean>(false);
   const [googleLoaded, setGoogleLoaded] = useState<boolean>(false);
   const [showRegeneratePopup, setShowRegeneratePopup] = useState<boolean>(false);
-  const [lastDirection, setLastDirection] = useState<string>();
   const router = useRouter();
 
   const [showPreview, setShowPreview] = useState<boolean>(false);
@@ -501,9 +499,7 @@ export default function ResponsesPage() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [currentIndex]);
 
-  const handleClose = () => {
-    router.push('/');
-  };
+ 
 
   const handleCheckout = async () => {
     try {
@@ -557,62 +553,8 @@ export default function ResponsesPage() {
     fetchLearningPercentage();
   }, [user?.email, responses.length]);
 
-  // Add this new function for handling Google Sign-In
-  const handleSignIn = async (response: { credential: string }) => {
-    try {
-      const token = response.credential;
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      
-      const user = {
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture
-      };
-      
-      localStorage.setItem('smoothrizz_user', JSON.stringify(user));
-      setUser(user);
-      setIsSignedIn(true);
-      setShowSignInOverlay(false);
-    } catch (error) {
-      console.error('Sign-in error:', error);
-      alert('Failed to sign in. Please try again.');
-    }
-  };
+  
 
-  // Add Google initialization effect
-  useEffect(() => {
-    const initializeGoogleSignIn = async () => {
-      if (!document.getElementById("google-client-script")) {
-        const script = document.createElement("script");
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.id = "google-client-script";
-        script.onload = async () => {
-          try {
-            console.log('Initializing Google Sign-In...');
-            const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-            const { clientId } = await res.json();
-            
-            if (!clientId) {
-              throw new Error('No client ID received from server');
-            }
-
-            window.google.accounts.id.initialize({
-              client_id: clientId,
-              callback: handleSignIn,
-            });
-            
-            setGoogleLoaded(true);
-          } catch (err) {
-            console.error("Error initializing Google Sign-In:", err);
-          }
-        };
-        document.body.appendChild(script);
-      }
-    };
-
-    initializeGoogleSignIn();
-  }, []);
 
   return (
     <div className="min-h-screen bg-white">
