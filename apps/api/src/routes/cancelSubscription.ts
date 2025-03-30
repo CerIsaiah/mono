@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '../utils/logger';
 
 // Initialize Stripe only if API key is available
 let stripe: Stripe | null = null;
@@ -8,9 +9,9 @@ if (process.env.STRIPE_SECRET_KEY) {
   stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
     apiVersion: '2025-02-24.acacia' // Use a consistent API version
   });
-  console.log('[Stripe] Successfully initialized Stripe client');
+  logger.info('Stripe client initialized successfully');
 } else {
-  console.error('[Stripe] STRIPE_SECRET_KEY not found in environment variables for cancellation');
+  logger.error('STRIPE_SECRET_KEY not found in environment variables for cancellation');
 }
 
 // Initialize Supabase client
@@ -25,7 +26,7 @@ const supabase = createClient(
   }
 );
 
-console.log('[Supabase] Initialized Supabase client');
+logger.info('Supabase client initialized');
 
 const router = Router();
 
@@ -37,14 +38,15 @@ interface CancelSubscriptionBody {
 
 router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Response) => {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  console.log(`[${requestId}] Starting subscription cancellation request`, {
+  logger.info('Starting subscription cancellation request', {
+    requestId,
     userEmail: req.body.userEmail,
     userId: req.body.userId
   });
 
   try {
     if (!stripe) {
-      console.error(`[${requestId}] Stripe client not configured for cancellation route`);
+      logger.error('Stripe client not configured for cancellation route', { requestId });
       return res.status(500).json({ error: 'Stripe is not configured' });
     }
 
@@ -52,11 +54,12 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
     const normalizedUserEmail = userEmail?.toLowerCase().trim();
 
     if (!normalizedUserEmail && !userId) {
-      console.error(`[${requestId}] Validation failed: No user email or ID provided`);
+      logger.error('Validation failed: No user email or ID provided', { requestId });
       return res.status(400).json({ error: 'User email or ID is required' });
     }
 
-    console.log(`[${requestId}] Processing cancellation request`, {
+    logger.info('Processing cancellation request', {
+      requestId,
       userEmail: normalizedUserEmail,
       userId,
       timestamp: new Date().toISOString()
@@ -69,7 +72,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
 
 
     // Get user data including stripe_customer_id
-    console.log(`[${requestId}] Fetching user data from Supabase`, {
+    logger.info('Fetching user data from Supabase', {
+      requestId,
       lookupCriteria: lookupCriteria.label
     });
 
@@ -80,7 +84,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
       .single();
 
     if (userError || !user) {
-      console.error(`[${requestId}] Failed to fetch user data`, {
+      logger.error('Failed to fetch user data', {
+        requestId,
         error: userError,
         lookupCriteria: lookupCriteria.label
       });
@@ -89,7 +94,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
       return res.status(status).json({ error: message });
     }
 
-    console.log(`[${requestId}] Successfully retrieved user data`, {
+    logger.info('Successfully retrieved user data', {
+      requestId,
       userId: user.id,
       email: user.email,
       hasStripeCustomerId: !!user.stripe_customer_id,
@@ -102,7 +108,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
     if (!customerId) {
        // If the user is currently in a trial managed solely by DB flags (before Stripe interaction completes)
       if (user.is_trial && user.trial_end_date) {
-        console.log(`[${requestId}] Cancelling DB-managed trial`, {
+        logger.info('Cancelling DB-managed trial', {
+          requestId,
           userId: user.id,
           email: user.email,
           trialEndDate: user.trial_end_date
@@ -122,13 +129,15 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
           .single();
 
         if (updateError) {
-            console.error(`[${requestId}] Failed to cancel DB-managed trial`, {
+            logger.error('Failed to cancel DB-managed trial', {
+              requestId,
               error: updateError,
               userId: user.id
             });
              return res.status(500).json({ error: 'Failed to cancel trial' });
         }
-         console.log(`[${requestId}] Successfully cancelled DB-managed trial`, {
+         logger.info('Successfully cancelled DB-managed trial', {
+           requestId,
            userId: user.id,
            email: user.email,
            timestamp: new Date().toISOString()
@@ -139,7 +148,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
            databaseUpdate: updatedUser
          });
       } else {
-        console.warn(`[${requestId}] No subscription found to cancel`, {
+        logger.warn('No subscription found to cancel', {
+          requestId,
           userId: user.id,
           email: user.email,
           reason: 'No Stripe customer ID and not in DB-managed trial'
@@ -152,7 +162,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
 
 
     // Find active or trialing Stripe subscriptions for the customer
-    console.log(`[${requestId}] Fetching Stripe subscriptions`, {
+    logger.info('Fetching Stripe subscriptions', {
+      requestId,
       customerId,
       userEmail: user.email
     });
@@ -169,7 +180,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
     );
 
 
-    console.log(`[${requestId}] Subscription status`, {
+    logger.info('Subscription status', {
+      requestId,
       totalSubscriptions: subscriptions.data.length,
       cancellableSubscriptions: cancellableSubscriptions.length,
       customerId
@@ -177,11 +189,16 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
 
 
     if (cancellableSubscriptions.length === 0) {
-      console.log(`[${requestId}] No active or trialing subscription found to cancel for customer ${customerId} (User: ${user.email})`);
+      logger.info('No active or trialing subscription found to cancel for customer', {
+        requestId,
+        customerId,
+        userEmail: user.email
+      });
       // Check if maybe it was *already* set to cancel
        const alreadyCancelingSub = subscriptions.data.find(sub => sub.cancel_at_period_end);
        if (alreadyCancelingSub) {
-           console.log(`[${requestId}] Subscription already scheduled for cancellation`, {
+           logger.info('Subscription already scheduled for cancellation', {
+             requestId,
              subscriptionId: alreadyCancelingSub.id,
              cancelAt: new Date(alreadyCancelingSub.cancel_at! * 1000).toISOString()
            });
@@ -193,7 +210,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
     // Assuming we only want to cancel one subscription (the most recent active/trialing one)
     const subscriptionToCancel = cancellableSubscriptions[0]; // Usually the latest one
 
-     console.log(`[${requestId}] Initiating subscription cancellation`, {
+     logger.info('Initiating subscription cancellation', {
+       requestId,
        subscriptionId: subscriptionToCancel.id,
        status: subscriptionToCancel.status,
        currentPeriodEnd: new Date(subscriptionToCancel.current_period_end * 1000).toISOString()
@@ -205,7 +223,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
       cancel_at_period_end: true,
     });
 
-    console.log(`[${requestId}] Successfully scheduled subscription cancellation`, {
+    logger.info('Successfully scheduled subscription cancellation', {
+      requestId,
       subscriptionId: canceledSubscription.id,
       cancelAt: new Date(canceledSubscription.current_period_end * 1000).toISOString(),
       status: canceledSubscription.status
@@ -224,7 +243,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
 
      // If canceling during a trial period, potentially update trial flags
      if (canceledSubscription.status === 'trialing') {
-         console.log(`[${requestId}] Subscription cancelled during trial period`, {
+         logger.info('Subscription cancelled during trial period', {
+           requestId,
            subscriptionId: canceledSubscription.id,
            userId: user.id
          });
@@ -240,7 +260,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
       .single(); // Make sure to return the updated record
 
     if (updateError) {
-      console.error(`[${requestId}] Failed to update user record`, {
+      logger.error('Failed to update user record', {
+        requestId,
         error: updateError,
         userId: user.id,
         subscriptionId: canceledSubscription.id
@@ -254,7 +275,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
       });
     }
 
-     console.log(`[${requestId}] Successfully completed cancellation process`, {
+     logger.info('Successfully completed cancellation process', {
+       requestId,
        userId: user.id,
        email: user.email,
        subscriptionId: canceledSubscription.id,
@@ -275,7 +297,8 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
     });
 
   } catch (error: any) {
-    console.error(`[${requestId}] Unhandled error in cancel-subscription`, {
+    logger.error('Unhandled error in cancel-subscription', {
+      requestId,
       error: {
         message: error.message,
         code: error.code,

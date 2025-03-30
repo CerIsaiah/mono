@@ -10,15 +10,16 @@ import learningPercentageRouter from './routes/learning-percentage';
 import checkoutRouter from './routes/checkout';
 import webhooksRouter from './routes/webhooks';
 import cancelSubscriptionRouter from './routes/cancelSubscription';
+import { logger } from './utils/logger';
 
 // Debug log for environment
-console.log('Environment Check:', {
+logger.info('Environment Check', {
   environment: process.env.NODE_ENV,
   googleClientId: !!process.env.GOOGLE_CLIENT_ID,
   port: process.env.PORT
 });
 
-console.log('Node Environment:', process.env.NODE_ENV);
+logger.info('Node Environment', { env: process.env.NODE_ENV });
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -30,7 +31,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
-console.log('Allowed CORS origins:', allowedOrigins);
+logger.info('CORS Configuration', { allowedOrigins });
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -38,7 +39,7 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log('Origin not allowed:', origin);
+      logger.warn('CORS Origin rejected', { origin });
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -53,6 +54,19 @@ app.use('/api/webhooks', express.raw({ type: 'application/json' }));
 // Increase the limit to 50MB for image uploads etc.
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Error handling middleware
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  logger.error('Unhandled error', {
+    error: {
+      message: err.message,
+      stack: err.stack
+    },
+    path: req.path,
+    method: req.method
+  });
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Smoothrizz API' });
@@ -71,5 +85,5 @@ app.use('/api/webhooks', webhooksRouter);
 app.use('/api/cancel-subscription', cancelSubscriptionRouter);
 
 app.listen(PORT, () => {
-  console.log(`✅ API running on port ${PORT}`);
+  logger.info('Server started', { port: PORT });
 }); 
