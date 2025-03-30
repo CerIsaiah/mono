@@ -49,28 +49,20 @@ declare global {
  */
 
 export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, preventReload = false }: GoogleSignInProps) {
-  const overlayButtonRef = useRef<HTMLDivElement>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const buttonContainerRef = useRef<HTMLDivElement>(null);
-
-  // Cleanup function to safely remove button
-  const cleanupButton = useCallback(() => {
-    if (buttonContainerRef.current) {
-      while (buttonContainerRef.current.firstChild) {
-        buttonContainerRef.current.removeChild(buttonContainerRef.current.firstChild);
-      }
-    }
-  }, []);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const initializeButton = async () => {
-      if (!window.google || !buttonContainerRef.current) {
-        return;
-      }
+    let mounted = true;
 
+    const initializeButton = async () => {
       try {
+        if (!buttonContainerRef.current || !window.google?.accounts?.id) {
+          return;
+        }
+
         setIsLoading(true);
+        
         // Get client ID from environment variable or API
         const response = await fetch(`${API_BASE_URL}/auth/google-client-id`);
         const { clientId } = await response.json();
@@ -78,61 +70,56 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
         if (!clientId) {
           throw new Error('No client ID received from server');
         }
-        
-        // Only initialize if not already initialized
-        if (!isInitialized) {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: async (response: { credential: string }) => {
-              try {
-                // Store user data based on the credential
-                const token = response.credential;
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                
-                // Extract user info from the token payload
-                const user = {
-                  email: payload.email,
-                  name: payload.name,
-                  picture: payload.picture
-                };
-                
-                // Store user data in localStorage
-                localStorage.setItem('smoothrizz_user', JSON.stringify(user));
-                
-                // Call onSignInSuccess if provided
-                if (onSignInSuccess) {
-                  onSignInSuccess({ user, credential: response.credential } as GoogleAuthResponse);
-                }
-                
-                // Close the overlay after successful sign-in
-                if (onClose) onClose();
-                
-                // Only reload if not prevented
-                if (!preventReload) {
-                  window.location.reload();
-                }
-              } catch (error) {
-                console.error('Sign-in error:', error);
-                alert('Failed to sign in. Please try again.');
+
+        // Initialize Google Sign-In
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response: { credential: string }) => {
+            try {
+              const token = response.credential;
+              const payload = JSON.parse(atob(token.split('.')[1]));
+              
+              const user = {
+                email: payload.email,
+                name: payload.name,
+                picture: payload.picture
+              };
+              
+              localStorage.setItem('smoothrizz_user', JSON.stringify(user));
+              
+              if (onSignInSuccess) {
+                onSignInSuccess({ user, credential: response.credential } as GoogleAuthResponse);
               }
+              
+              if (onClose) onClose();
+              
+              if (!preventReload) {
+                window.location.reload();
+              }
+            } catch (error) {
+              console.error('Sign-in error:', error);
+              alert('Failed to sign in. Please try again.');
             }
-          });
-          setIsInitialized(true);
-        }
+          }
+        });
 
-        // Safely cleanup existing button before rendering new one
-        cleanupButton();
+        // Clear any existing content
+        buttonContainerRef.current.innerHTML = '';
 
-        // Render the button in the container
+        // Render the button
         window.google.accounts.id.renderButton(buttonContainerRef.current, {
           theme: "outline",
-          size: "large",
+          size: "large"
         });
-        
-        setIsLoading(false);
+
+        if (mounted) {
+          setIsLoading(false);
+        }
       } catch (error) {
         console.error('Error initializing Google Sign-In:', error);
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -140,22 +127,27 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
       initializeButton();
     }
 
-    // Cleanup on unmount
     return () => {
-      cleanupButton();
+      mounted = false;
+      if (buttonContainerRef.current) {
+        buttonContainerRef.current.innerHTML = '';
+      }
     };
-  }, [googleLoaded, onClose, onSignInSuccess, preventReload, isInitialized, cleanupButton]);
+  }, [googleLoaded, onClose, onSignInSuccess, preventReload]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
       <div className="bg-white p-4 sm:p-8 rounded-xl w-full max-w-sm mx-auto flex flex-col items-center">
-        <div className="min-h-[40px] flex items-center justify-center">
-          {(isLoading || !googleLoaded) ? (
+        {isLoading || !googleLoaded ? (
+          <div className="h-10 flex items-center justify-center">
             <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-900 border-t-transparent"></div>
-          ) : (
-            <div ref={buttonContainerRef} className="min-h-[40px] flex items-center justify-center" />
-          )}
-        </div>
+          </div>
+        ) : (
+          <div 
+            ref={buttonContainerRef}
+            className="h-10 w-64 flex items-center justify-center"
+          />
+        )}
         <p className="mt-4 text-center text-sm sm:text-base">
           Please sign in with Google to view your saved responses/generate more.
         </p>
