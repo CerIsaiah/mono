@@ -22,6 +22,18 @@
  * - src/app/page.js: Uses for initial response generation
  */
 
+// Add API_BASE_URL constant
+const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
+
+// Helper function to validate base64
+function isValidBase64(str) {
+  try {
+    return /^[A-Za-z0-9+/=]+$/.test(str);
+  } catch (e) {
+    return false;
+  }
+}
+
 export async function analyzeScreenshot(file, mode, isSignedIn, context = '', lastText = '') {
   let requestBody = {
     mode,
@@ -42,6 +54,12 @@ export async function analyzeScreenshot(file, mode, isSignedIn, context = '', la
       if (!base64) {
         throw new Error('Failed to convert image to base64');
       }
+      
+      // Validate base64 format
+      if (!isValidBase64(base64)) {
+        throw new Error('Invalid base64 format');
+      }
+      
       requestBody.imageBase64 = base64;
     } catch (error) {
       console.error('Error processing image:', error);
@@ -54,14 +72,20 @@ export async function analyzeScreenshot(file, mode, isSignedIn, context = '', la
     throw new Error('No input provided. Please provide an image or text.');
   }
 
-  // Add a loading state UI indicator to ResponsesPage
-  
   // Add timeout to fetch
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const response = await fetch('/api/openai', {
+    console.log('Making request to OpenAI API:', {
+      endpoint: `${API_BASE_URL}/api/openai`,
+      hasImage: !!requestBody.imageBase64,
+      hasContext: !!requestBody.context,
+      hasLastText: !!requestBody.lastText,
+      mode: requestBody.mode
+    });
+
+    const response = await fetch(`${API_BASE_URL}/api/openai`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -72,29 +96,38 @@ export async function analyzeScreenshot(file, mode, isSignedIn, context = '', la
     });
     
     clearTimeout(timeoutId);
-    const data = await response.json();
     
     if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
       // Handle specific error cases
       switch (response.status) {
         case 403:
-          throw new Error(data.error || 'Usage limit reached. Please try again later.');
+          throw new Error(errorData.error || 'Usage limit reached. Please try again later.');
         case 429:
           throw new Error('Rate limit exceeded. Please try again later.');
         case 413:
           throw new Error('Image file too large. Please use a smaller image.');
+        case 405:
+          throw new Error('Method not allowed. Please try again.');
         default:
-          throw new Error(data.error || 'An error occurred. Please try again.');
+          throw new Error(errorData.error || 'An error occurred. Please try again.');
       }
     }
 
-    // The response is now guaranteed to be an array of exactly 10 strings
+    const data = await response.json();
+    
+    // Validate response format
+    if (!data.responses || !Array.isArray(data.responses)) {
+      throw new Error('Invalid response format from server');
+    }
+
     return data.responses;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
       throw new Error('Request timed out. Please try again.');
     }
+    console.error('API request failed:', error);
     throw error;
   }
 }
