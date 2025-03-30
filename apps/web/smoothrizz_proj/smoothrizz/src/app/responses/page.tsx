@@ -132,6 +132,7 @@ export default function ResponsesPage() {
   const [usageCount, setUsageCount] = useState<number>(0);
   const [showUpgradePopup, setShowUpgradePopup] = useState<boolean>(false);
   const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [googleLoaded, setGoogleLoaded] = useState<boolean>(false);
   const [showRegeneratePopup, setShowRegeneratePopup] = useState<boolean>(false);
   const [lastDirection, setLastDirection] = useState<string>();
   const router = useRouter();
@@ -556,190 +557,246 @@ export default function ResponsesPage() {
     fetchLearningPercentage();
   }, [user?.email, responses.length]);
 
+  // Add this new function for handling Google Sign-In
+  const handleSignIn = async (response: { credential: string }) => {
+    try {
+      const token = response.credential;
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      
+      const user = {
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture
+      };
+      
+      localStorage.setItem('smoothrizz_user', JSON.stringify(user));
+      setUser(user);
+      setIsSignedIn(true);
+      setShowSignInOverlay(false);
+    } catch (error) {
+      console.error('Sign-in error:', error);
+      alert('Failed to sign in. Please try again.');
+    }
+  };
+
+  // Add Google initialization effect
+  useEffect(() => {
+    const initializeGoogleSignIn = async () => {
+      if (!document.getElementById("google-client-script")) {
+        const script = document.createElement("script");
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.id = "google-client-script";
+        script.onload = async () => {
+          try {
+            console.log('Initializing Google Sign-In...');
+            const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+            const { clientId } = await res.json();
+            
+            if (!clientId) {
+              throw new Error('No client ID received from server');
+            }
+
+            window.google.accounts.id.initialize({
+              client_id: clientId,
+              callback: handleSignIn,
+            });
+            
+            setGoogleLoaded(true);
+          } catch (err) {
+            console.error("Error initializing Google Sign-In:", err);
+          }
+        };
+        document.body.appendChild(script);
+      }
+    };
+
+    initializeGoogleSignIn();
+  }, []);
+
   return (
-    <>
-      <div className="min-h-screen bg-white">
-        <div className="fixed inset-0 bg-gradient-to-br from-pink-500/5 via-white/50 to-gray-100/50 backdrop-blur-sm z-50 flex flex-col">
-          {/* Close button - smaller and higher */}
-          <button
-            onClick={() => router.push('/')}
-            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-gray-500 hover:text-gray-700 z-50 text-xl"
-          >
-            ×
-          </button>
+    <div className="min-h-screen bg-white">
+      <div className="fixed inset-0 bg-gradient-to-br from-pink-500/5 via-white/50 to-gray-100/50 backdrop-blur-sm z-50 flex flex-col">
+        {/* Close button - smaller and higher */}
+        <button
+          onClick={() => router.push('/')}
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-gray-500 hover:text-gray-700 z-50 text-xl"
+        >
+          ×
+        </button>
 
-          {/* Top section with fixed height */}
-          <div className="flex flex-col space-y-4 pt-3 pb-2">
-            {/* Top buttons container */}
-            <div className="flex justify-center gap-1.5 z-20">
-              <button
-                onClick={() => setShowPreview(true)}
-                className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded-full bg-white/90 backdrop-blur-sm text-[11px] shadow-sm font-medium"
-              >
-                Review Photo
-              </button>
-              
-              {/* Show Saved button for everyone, but prompt sign in if not authenticated */}
-              <button
-                onClick={() => isSignedIn ? router.push('/saved') : setShowSignInOverlay(true)}
-                className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded-full bg-white/90 backdrop-blur-sm text-[11px] shadow-sm font-medium flex items-center gap-1"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-                Saved
-              </button>
-            </div>
-
-            {/* AI Learning Bar */}
-            <div className="mx-auto w-full max-w-md px-4">
-              <div className="bg-white/90 backdrop-blur-sm rounded-lg p-1.5 border border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between mb-0.5">
-                  <div className="flex items-center gap-1">
-                    <span className="text-pink-400">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                      </svg>
-                    </span>
-                    <span className="text-[10px] font-medium text-gray-700">AI Learning</span>
-                  </div>
-                  {!isPremium && (
-                    <button
-                      onClick={() => router.push('/saved?tab=profile')}
-                      className="text-[10px] text-pink-600 hover:text-pink-700 font-medium whitespace-nowrap"
-                    >
-                      Upgrade →
-                    </button>
-                  )}
-                </div>
-                
-                <div className="relative h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
-                      isPremium ? 'bg-gradient-to-r from-pink-500 to-purple-500' : 'bg-gray-400'
-                    }`}
-                    style={{ width: `${matchPercentage}%` }}
-                  />
-                </div>
-                
-                <div className="flex justify-between text-[10px] mt-1">
-                  <span className={isPremium ? 'text-green-600' : 'text-gray-600'}>
-                    {matchPercentage}% Learned
-                  </span>
-                  {!isPremium && (
-                    <span className="text-gray-500">
-                      Upgrade for better matches
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+        {/* Top section with fixed height */}
+        <div className="flex flex-col space-y-4 pt-3 pb-2">
+          {/* Top buttons container */}
+          <div className="flex justify-center gap-1.5 z-20">
+            <button
+              onClick={() => setShowPreview(true)}
+              className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded-full bg-white/90 backdrop-blur-sm text-[11px] shadow-sm font-medium"
+            >
+              Review Photo
+            </button>
+            
+            {/* Show Saved button for everyone, but prompt sign in if not authenticated */}
+            <button
+              onClick={() => isSignedIn ? router.push('/saved') : setShowSignInOverlay(true)}
+              className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded-full bg-white/90 backdrop-blur-sm text-[11px] shadow-sm font-medium flex items-center gap-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              Saved
+            </button>
           </div>
 
-          {/* Cards container */}
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="w-full max-w-[280px] h-[380px] relative" key={key}>
-              {responses.map((response, index) => {
-                if (index > currentIndex) return null;
-                
-                return (
-                  <TinderCard
-                    ref={childRefs.current[index]}
-                    key={`card-${index}-${key}`}
-                    onSwipe={(dir: Direction) => canInteract && swiped(dir, response, index)}
-                    onCardLeftScreen={() => outOfFrame(index)}
-                    preventSwipe={canInteract ? ['up', 'down'] : ['up', 'down', 'left', 'right']}
-                    className="absolute w-full h-full cursor-grab active:cursor-grabbing"
+          {/* AI Learning Bar */}
+          <div className="mx-auto w-full max-w-md px-4">
+            <div className="bg-white/90 backdrop-blur-sm rounded-lg p-1.5 border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-pink-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                  </span>
+                  <span className="text-[10px] font-medium text-gray-700">AI Learning</span>
+                </div>
+                {!isPremium && (
+                  <button
+                    onClick={() => router.push('/saved?tab=profile')}
+                    className="text-[10px] text-pink-600 hover:text-pink-700 font-medium whitespace-nowrap"
                   >
-                    <div className="bg-white rounded-xl p-5 w-full h-full flex flex-col transform transition-all duration-200 
-                      hover:scale-[1.02] relative border border-gray-200 shadow-lg">
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                        <span className="px-2 py-1 bg-white rounded-full text-[15px] font-medium text-gray-500 shadow-sm border border-gray-200">
-                          SWIPE
-                        </span>
-                      </div>
-
-                      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 flex items-center justify-center">
-                        <div className="prose prose-sm max-w-full text-center px-3">
-                          <p className="text-gray-800 whitespace-pre-wrap text-base leading-relaxed font-medium">
-                            {response}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="absolute bottom-4 left-0 right-0 flex justify-between px-6">
-                        <span className="text-red-400 text-sm">← Skip card</span>
-                        <span className="text-green-500 text-sm">Save style →</span>
-                      </div>
-                    </div>
-                  </TinderCard>
-                );
-              })}
-            </div>
-
-            {/* Swipe Counter */}
-            <div className="text-center mt-4">
-              <span className="text-xs font-medium text-gray-600">
-                {isPremium ? (
-                  'Unlimited Swipes Available'
-                ) : (
-                  `${isSignedIn ? FREE_USER_DAILY_LIMIT - usageCount : ANONYMOUS_USAGE_LIMIT - usageCount} Daily Free Swipes Left`
+                    Upgrade →
+                  </button>
                 )}
-              </span>
-            </div>
-
-            {/* Bottom buttons */}
-            <div className="w-full max-w-[280px] space-y-1.5 mt-4">
-              <button
-                onClick={() => router.push('/')}
-                className="w-full bg-black/5 hover:bg-black/10 px-4 py-2 rounded-full inline-flex items-center justify-center space-x-1.5 transition-all duration-200"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                </svg>
-                <span className="text-xs font-medium">New Screenshot</span>
-              </button>
+              </div>
+              
+              <div className="relative h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
+                    isPremium ? 'bg-gradient-to-r from-pink-500 to-purple-500' : 'bg-gray-400'
+                  }`}
+                  style={{ width: `${matchPercentage}%` }}
+                />
+              </div>
+              
+              <div className="flex justify-between text-[10px] mt-1">
+                <span className={isPremium ? 'text-green-600' : 'text-gray-600'}>
+                  {matchPercentage}% Learned
+                </span>
+                {!isPremium && (
+                  <span className="text-gray-500">
+                    Upgrade for better matches
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Overlays */}
-        {isGenerating && <LoadingScreen />}
-        
-        {showSignInOverlay && !isSignedIn && (
-          <GoogleSignInOverlay 
-            onClose={() => setShowSignInOverlay(false)}
-            onSignInSuccess={() => {
-              setShowSignInOverlay(false);
-            }}
-            preventReload={true}
-          />
-        )}
+        {/* Cards container */}
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="w-full max-w-[280px] h-[380px] relative" key={key}>
+            {responses.map((response, index) => {
+              if (index > currentIndex) return null;
+              
+              return (
+                <TinderCard
+                  ref={childRefs.current[index]}
+                  key={`card-${index}-${key}`}
+                  onSwipe={(dir: Direction) => canInteract && swiped(dir, response, index)}
+                  onCardLeftScreen={() => outOfFrame(index)}
+                  preventSwipe={canInteract ? ['up', 'down'] : ['up', 'down', 'left', 'right']}
+                  className="absolute w-full h-full cursor-grab active:cursor-grabbing"
+                >
+                  <div className="bg-white rounded-xl p-5 w-full h-full flex flex-col transform transition-all duration-200 
+                    hover:scale-[1.02] relative border border-gray-200 shadow-lg">
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                      <span className="px-2 py-1 bg-white rounded-full text-[15px] font-medium text-gray-500 shadow-sm border border-gray-200">
+                        SWIPE
+                      </span>
+                    </div>
 
-        {showUpgradePopup && isSignedIn && !isPremium && (
-          <UpgradePopup 
-            onClose={() => setShowUpgradePopup(false)} 
-            handleCheckout={handleCheckout}
-          />
-        )}
+                    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 flex items-center justify-center">
+                      <div className="prose prose-sm max-w-full text-center px-3">
+                        <p className="text-gray-800 whitespace-pre-wrap text-base leading-relaxed font-medium">
+                          {response}
+                        </p>
+                      </div>
+                    </div>
 
-        {showRegeneratePopup && (
-          <RegeneratePopup 
-            onRegenerate={() => {
-              handleRegenerate();
-              setShowRegeneratePopup(false);
-            }}
-            onClose={() => router.push('/')}
-          />
-        )}
+                    <div className="absolute bottom-4 left-0 right-0 flex justify-between px-6">
+                      <span className="text-red-400 text-sm">← Skip card</span>
+                      <span className="text-green-500 text-sm">Save style →</span>
+                    </div>
+                  </div>
+                </TinderCard>
+              );
+            })}
+          </div>
 
-        {showPreview && lastFile && (
-          <PhotoPreview 
-            imageUrl={lastFile}
-            onClose={() => setShowPreview(false)}
-          />
-        )}
+          {/* Swipe Counter */}
+          <div className="text-center mt-4">
+            <span className="text-xs font-medium text-gray-600">
+              {isPremium ? (
+                'Unlimited Swipes Available'
+              ) : (
+                `${isSignedIn ? FREE_USER_DAILY_LIMIT - usageCount : ANONYMOUS_USAGE_LIMIT - usageCount} Daily Free Swipes Left`
+              )}
+            </span>
+          </div>
+
+          {/* Bottom buttons */}
+          <div className="w-full max-w-[280px] space-y-1.5 mt-4">
+            <button
+              onClick={() => router.push('/')}
+              className="w-full bg-black/5 hover:bg-black/10 px-4 py-2 rounded-full inline-flex items-center justify-center space-x-1.5 transition-all duration-200"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              </svg>
+              <span className="text-xs font-medium">New Screenshot</span>
+            </button>
+          </div>
+        </div>
       </div>
-    </>
+
+      {/* Overlays */}
+      {isGenerating && <LoadingScreen />}
+      
+      {showSignInOverlay && !isSignedIn && (
+        <GoogleSignInOverlay 
+          googleLoaded={googleLoaded}
+          onClose={() => setShowSignInOverlay(false)}
+          onSignInSuccess={() => {
+            setShowSignInOverlay(false);
+          }}
+          preventReload={true}
+        />
+      )}
+
+      {showUpgradePopup && isSignedIn && !isPremium && (
+        <UpgradePopup 
+          onClose={() => setShowUpgradePopup(false)} 
+          handleCheckout={handleCheckout}
+        />
+      )}
+
+      {showRegeneratePopup && (
+        <RegeneratePopup 
+          onRegenerate={() => {
+            handleRegenerate();
+            setShowRegeneratePopup(false);
+          }}
+          onClose={() => router.push('/')}
+        />
+      )}
+
+      {showPreview && lastFile && (
+        <PhotoPreview 
+          imageUrl={lastFile}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </div>
   );
 } 

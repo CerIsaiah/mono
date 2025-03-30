@@ -1,6 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useState } from 'react';
-import Script from 'next/script';
+import React, { useEffect, useRef } from 'react';
 import { GoogleSignInProps, GoogleAuthResponse } from '../types/auth';
 
 // Add this near the top of the file
@@ -49,13 +48,12 @@ declare global {
  * - src/app/api/auth/google/route.js: Authentication endpoint
  */
 
-export function GoogleSignInOverlay({ onClose, onSignInSuccess, preventReload = false }: GoogleSignInProps) {
+export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, preventReload = false }: GoogleSignInProps) {
   const overlayButtonRef = useRef<HTMLDivElement>(null);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
 
   useEffect(() => {
     const initializeButton = async () => {
-      if (scriptLoaded && window.google && overlayButtonRef.current) {
+      if (googleLoaded && window.google && overlayButtonRef.current) {
         try {
           // Get client ID from environment variable
           const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -114,23 +112,16 @@ export function GoogleSignInOverlay({ onClose, onSignInSuccess, preventReload = 
     };
 
     initializeButton();
-  }, [scriptLoaded, onClose, onSignInSuccess, preventReload]);
+  }, [googleLoaded, onClose, onSignInSuccess, preventReload]);
 
   return (
-    <>
-      <Script
-        src="https://accounts.google.com/gsi/client"
-        strategy="afterInteractive"
-        onLoad={() => setScriptLoaded(true)}
-      />
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-        <div className="bg-white p-4 sm:p-8 rounded-xl w-full max-w-sm mx-auto flex flex-col items-center">
-          <div ref={overlayButtonRef}></div>
-          <p className="mt-4 text-center text-sm sm:text-base">
-            Please sign in with Google to view your saved responses/generate more.
-          </p>
-        </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+      <div className="bg-white p-4 sm:p-8 rounded-xl w-full max-w-sm mx-auto flex flex-col items-center">
+        <div ref={overlayButtonRef}></div>
+        <p className="mt-4 text-center text-sm sm:text-base">
+          Please sign in with Google to view your saved responses/generate more.
+        </p>
       </div>
-    </>
+    </div>
   );
 } 

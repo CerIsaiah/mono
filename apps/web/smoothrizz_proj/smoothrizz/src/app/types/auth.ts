@@ -1,4 +1,5 @@
 export interface GoogleSignInProps {
+  googleLoaded: boolean;
   onClose?: () => void;
   onSignInSuccess?: (response: GoogleAuthResponse) => void;
   preventReload?: boolean;
