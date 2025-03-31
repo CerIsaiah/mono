@@ -85,7 +85,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                 localStorage.setItem('smoothrizz_user', JSON.stringify(user));
                 
                 // Check if we should redirect based on anonymous limit
-                if (savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT && isAnonLimitTriggered === 'true') {
+                if (isAnonLimitTriggered === 'true') {
                   console.log('Anonymous user over limit - redirecting after sign-in');
                   sessionStorage.removeItem('anon_limit_triggered'); // Clear the flag
                   if (onClose) onClose();
