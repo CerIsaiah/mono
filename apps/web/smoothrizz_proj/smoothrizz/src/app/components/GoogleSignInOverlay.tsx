@@ -66,6 +66,8 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
             client_id: clientId,
             callback: async (response: { credential: string }) => {
               try {
+                console.log('Google sign-in callback triggered');
+                
                 // Store user data based on the credential
                 const token = response.credential;
                 const payload = JSON.parse(atob(token.split('.')[1]));
@@ -76,6 +78,7 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                   name: payload.name,
                   picture: payload.picture
                 };
+                console.log('User data extracted:', user);
                 
                 // Store user data in localStorage
                 localStorage.setItem('smoothrizz_user', JSON.stringify(user));
@@ -84,23 +87,38 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                 const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
                 const existingUser = localStorage.getItem('smoothrizz_user');
                 
+                console.log('Checking redirect conditions:', {
+                  savedUsage,
+                  existingUser,
+                  isAnonymous: !existingUser,
+                  isOverLimit: savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT
+                });
+                
                 // Only redirect to homepage if it was an anonymous user hitting their limit
                 if (!existingUser && savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
+                  console.log('Redirecting to homepage - anonymous user over limit');
                   if (onClose) onClose();
                   window.location.href = '/';
                   return;
                 }
                 
+                console.log('Proceeding with normal sign-in flow');
+                
                 // Call onSignInSuccess if provided
                 if (onSignInSuccess) {
+                  console.log('Calling onSignInSuccess');
                   onSignInSuccess({ user, credential: response.credential } as GoogleAuthResponse);
                 }
                 
                 // Close the overlay after successful sign-in
-                if (onClose) onClose();
+                if (onClose) {
+                  console.log('Closing overlay');
+                  onClose();
+                }
                 
                 // Only reload if not prevented
                 if (!preventReload) {
+                  console.log('Reloading page');
                   window.location.reload();
                 }
               } catch (error) {
