@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { checkUsageLimits, incrementUsage } from '../db/dbOperations';
+import { getClientIP } from '../utils/ipUtils';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const requestIP = req.ip || 'unknown';
+    const requestIP = getClientIP(req);
     const userEmail = req.headers['x-user-email'] as string;
     
     // Check if we have a valid email, otherwise use IP
@@ -22,7 +23,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const requestIP = req.ip || 'unknown';
+    const requestIP = getClientIP(req);
     const userEmail = req.headers['x-user-email'] as string;
     const { direction } = req.body;
     

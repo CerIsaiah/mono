@@ -2,6 +2,7 @@ import express, { Request, Response, Router, RequestHandler } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { findOrCreateUser, getIPUsage } from '../db/dbOperations';
 import { GoogleAuthPayload, GoogleAuthResponse } from '../types/auth';
+import { getClientIP } from '../utils/ipUtils';
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -68,15 +69,16 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
     return res.status(500).json({ error: 'OAuth client not initialized' });
   }
 
+  const clientIP = getClientIP(req);
   console.log('Received Google auth request:', {
     timestamp: new Date().toISOString(),
-    ip: req.ip,
+    ip: clientIP,
     hasCredential: !!req.body.credential
   });
 
   try {
     const { credential } = req.body;
-    const requestIP = req.ip;
+    const requestIP = clientIP;
 
     if (!requestIP) {
       console.error('Missing IP address in request');

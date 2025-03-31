@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { checkUsageStatus, UsageStatus } from '../db/usageTracking';
 import { checkAndResetUsage } from '../db/dbOperations';
+import { getClientIP } from '../utils/ipUtils';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const requestIP = req.ip || 'unknown';
+    const requestIP = getClientIP(req);
     const userEmail = req.headers['x-user-email'] as string;
     const userName = req.headers['x-user-name'] as string;
     const userPicture = req.headers['x-user-picture'] as string;

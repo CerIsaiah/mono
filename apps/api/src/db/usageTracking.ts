@@ -16,6 +16,7 @@ import {
 import { getUserData, getIPUsage, findOrCreateUser } from './dbOperations';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import { getClientIP } from '../utils/ipUtils';
 
 // Types
 export interface UsageStatus {
@@ -212,7 +213,7 @@ export const trackUsageMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    const identifier = req.user?.email || req.ip || 'anonymous';
+    const identifier = req.user?.email || getClientIP(req) || 'anonymous';
     const isEmail = !!req.user?.email;
 
     const status = await checkUsageStatus(
