@@ -288,6 +288,8 @@ export default function ResponsesPage() {
           setShowUpgradePopup(true);
           return;
         }
+        // If we can't swipe for any other reason, return early
+        return;
       }
 
       // Update usage count from response
@@ -585,10 +587,14 @@ export default function ResponsesPage() {
       // Update usage count
       setUsageCount(usageData.dailySwipes || 0);
 
-      // If the sign in was triggered due to exceeding anonymous limit, redirect to home
-      if (usageData.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
+      // If user has exceeded the anonymous limit, redirect to home
+      if (!usageData.isPremium && usageData.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
         router.push('/');
+        return;
       }
+
+      // Refresh the page to ensure all states are properly updated
+      window.location.reload();
     } catch (error) {
       console.error('Sign-in error:', error);
       alert('Failed to sign in. Please try again.');
