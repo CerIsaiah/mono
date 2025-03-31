@@ -281,7 +281,8 @@ export default function ResponsesPage() {
       
       // Handle usage limits
       if (!data.canSwipe) {
-        if (data.requiresSignIn) {
+        // If user is not signed in and has hit anonymous limit
+        if (!isSignedIn && usageCount >= ANONYMOUS_USAGE_LIMIT) {
           setShowSignInOverlay(true);
           return;
         } else if (data.requiresUpgrade) {

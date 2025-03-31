@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useRef } from 'react';
 import { GoogleSignInProps, GoogleAuthResponse } from '../types/auth';
-
+import { ANONYMOUS_USAGE_LIMIT } from '../shared/constants';
 // Add this near the top of the file
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
 
@@ -79,6 +79,13 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                 
                 // Store user data in localStorage
                 localStorage.setItem('smoothrizz_user', JSON.stringify(user));
+                
+                // Check if this was triggered by anonymous limit
+                const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
+                if (savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
+                  window.location.href = '/';
+                  return;
+                }
                 
                 // Call onSignInSuccess if provided
                 if (onSignInSuccess) {
