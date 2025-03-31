@@ -282,6 +282,7 @@ export default function ResponsesPage() {
       // Handle usage limits
       if (!data.canSwipe) {
         if (data.requiresSignIn) {
+          sessionStorage.setItem('anon_limit_triggered', 'true');
           setShowSignInOverlay(true);
           return;
         } else if (data.requiresUpgrade) {

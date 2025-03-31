@@ -68,33 +68,12 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
               try {
                 console.log('Google sign-in callback triggered');
                 
-                // Check if this was triggered by anonymous limit BEFORE storing new user data
+                // Check if this was triggered by anonymous limit
                 const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
-                console.log('Current usage before sign-in:', savedUsage);
+                const isAnonLimitTriggered = sessionStorage.getItem('anon_limit_triggered');
+                console.log('Current usage before sign-in:', savedUsage, 'Anon limit triggered:', isAnonLimitTriggered);
 
-                // Check if we should redirect based on anonymous limit
-                if (savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT && !localStorage.getItem('smoothrizz_user')) {
-                  console.log('Anonymous user over limit - will redirect after sign-in');
-                  const shouldRedirect = true;
-                  
-                  // Process sign-in first
-                  const token = response.credential;
-                  const payload = JSON.parse(atob(token.split('.')[1]));
-                  const user = {
-                    email: payload.email,
-                    name: payload.name,
-                    picture: payload.picture
-                  };
-                  localStorage.setItem('smoothrizz_user', JSON.stringify(user));
-                  
-                  if (onClose) onClose();
-                  console.log('Redirecting to homepage');
-                  window.location.href = '/';
-                  return;
-                }
-                
-                // Normal sign-in flow
-                console.log('Proceeding with normal sign-in flow');
+                // Process sign-in
                 const token = response.credential;
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 const user = {
@@ -104,6 +83,19 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                 };
                 
                 localStorage.setItem('smoothrizz_user', JSON.stringify(user));
+                
+                // Check if we should redirect based on anonymous limit
+                if (savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT && isAnonLimitTriggered === 'true') {
+                  console.log('Anonymous user over limit - redirecting after sign-in');
+                  sessionStorage.removeItem('anon_limit_triggered'); // Clear the flag
+                  if (onClose) onClose();
+                  console.log('Redirecting to homepage');
+                  window.location.href = '/';
+                  return;
+                }
+                
+                // Normal sign-in flow
+                console.log('Proceeding with normal sign-in flow');
                 
                 if (onSignInSuccess) {
                   console.log('Calling onSignInSuccess');
