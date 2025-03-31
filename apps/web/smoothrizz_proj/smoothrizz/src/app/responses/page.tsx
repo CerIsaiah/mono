@@ -556,7 +556,7 @@ export default function ResponsesPage() {
     fetchLearningPercentage();
   }, [user?.email, responses.length]);
 
-  // Add this new function for handling Google Sign-In
+  // Update the handleSignIn function
   const handleSignIn = async (response: { credential: string }) => {
     try {
       const token = response.credential;
@@ -573,8 +573,20 @@ export default function ResponsesPage() {
       setIsSignedIn(true);
       setShowSignInOverlay(false);
 
-      // Check if we need to redirect to home after sign in
-      if (usageCount >= ANONYMOUS_USAGE_LIMIT) {
+      // Check current usage after sign in
+      const usageResponse = await fetch(`${API_BASE_URL}/api/usage`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': user.email
+        }
+      });
+      const usageData = await usageResponse.json();
+      
+      // Update usage count
+      setUsageCount(usageData.dailySwipes || 0);
+
+      // If the sign in was triggered due to exceeding anonymous limit, redirect to home
+      if (usageData.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
         router.push('/');
       }
     } catch (error) {
