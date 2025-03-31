@@ -38,9 +38,27 @@ export default function RootLayout({ children }) {
       </head>
       <body className="font-poppins">
         {children}
-        <Analytics />
-
-        </body>
+        <Analytics 
+          mode="production"
+          beforeSend={async (event) => {
+            try {
+              // Get the user's IP address
+              
+              const userIP = '149.43.113.30';
+              
+              // Block analytics from your specific IP
+              if (userIP || event.url.includes('localhost')) {
+                return null;
+              }
+              
+              return event;
+            } catch (error) {
+              // If we can't get the IP, still send the event
+              return event;
+            }
+          }}
+        />
+      </body>
     </html>
   )
 }
