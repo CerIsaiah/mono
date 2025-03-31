@@ -3,6 +3,7 @@ import { Poppins } from 'next/font/google'
 import { Analytics } from "@vercel/analytics/react"
 import './globals.css'
 import Script from 'next/script'
+import AnalyticsWrapper from './components/AnalyticsWrapper'
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -38,26 +39,7 @@ export default function RootLayout({ children }) {
       </head>
       <body className="font-poppins">
         {children}
-        <Analytics 
-          mode="production"
-          beforeSend={async (event) => {
-            try {
-              // Get the user's IP address
-              
-              const userIP = '149.43.113.30';
-              
-              // Block analytics from your specific IP
-              if (userIP || event.url.includes('localhost')) {
-                return null;
-              }
-              
-              return event;
-            } catch (error) {
-              // If we can't get the IP, still send the event
-              return event;
-            }
-          }}
-        />
+        <AnalyticsWrapper />
       </body>
     </html>
   )
