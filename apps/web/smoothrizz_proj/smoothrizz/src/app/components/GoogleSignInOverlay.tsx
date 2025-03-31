@@ -82,7 +82,11 @@ export function GoogleSignInOverlay({ googleLoaded, onClose, onSignInSuccess, pr
                 
                 // Check if this was triggered by anonymous limit
                 const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
-                if (savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
+                const existingUser = localStorage.getItem('smoothrizz_user');
+                
+                // Only redirect to homepage if it was an anonymous user hitting their limit
+                if (!existingUser && savedUsage.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
+                  if (onClose) onClose();
                   window.location.href = '/';
                   return;
                 }
