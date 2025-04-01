@@ -41,8 +41,6 @@ interface ResponseData {
   lastFile?: string;
 }
 
-
-
 // Add this near the top of the file, after imports
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
 
@@ -119,6 +117,27 @@ function GoogleSignInOverlay({ googleLoaded }: GoogleSignInOverlayProps) {
       </div>
     </div>
   );
+}
+
+// Add this near the top of the file, after imports
+declare global {
+  interface Window {
+    google: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+          }) => void;
+          renderButton: (element: HTMLElement, options: {
+            theme: string;
+            size: string;
+          }) => void;
+          cancel: () => void;
+        };
+      };
+    };
+  }
 }
 
 export default function Home() {
@@ -269,9 +288,18 @@ export default function Home() {
           user: data.user.email,
           timestamp: new Date().toISOString()
         });
+
+        // Set user data in localStorage first
+        localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
+        
+        // Update state
         setUser(data.user);
         setIsSignedIn(true);
-        localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
+
+        // Clear any existing Google Sign-In state
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.cancel();
+        }
 
         // Migrate anonymous saved responses if any
         const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
@@ -288,6 +316,10 @@ export default function Home() {
           localStorage.removeItem('anonymous_saved_responses');
           console.log('Anonymous responses migration complete');
         }
+
+        // Navigate to dashboard
+        router.push('/saved');
+        
       } else {
         console.error('Sign-in failed:', { 
           error: data.error,
@@ -296,12 +328,7 @@ export default function Home() {
         throw new Error(data.error || 'Failed to sign in');
       }
     } catch (error) {
-      console.error('Error signing in:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString()
-      });
+      console.error('Error signing in:', error);
       alert('Failed to sign in. Please try again.');
     }
   };

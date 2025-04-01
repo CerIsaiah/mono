@@ -19,6 +19,7 @@ declare global {
             theme: string;
             size: string;
           }) => void;
+          cancel: () => void;
         };
       };
     };
