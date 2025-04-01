@@ -23,9 +23,7 @@ class Logger {
   }
 
   debug(message: string, meta?: any) {
-    if (process.env.NODE_ENV === 'development') {
       process.stdout.write(this.formatMessage('DEBUG', message, meta) + '\n');
-    }
   }
 }
 
