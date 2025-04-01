@@ -167,6 +167,19 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
   }
 };
 
+// Handle sign out
+router.post('/signout', async (req: Request, res: Response) => {
+  try {
+    logger.info('User signing out');
+    // Since we don't need to check the database state, just return success
+    res.json({ success: true, message: 'Signed out successfully' });
+  } catch (error) {
+    logger.error('Error during sign out:', error);
+    // Even if there's an error, return success to ensure the user can sign out
+    res.json({ success: true, message: 'Signed out successfully' });
+  }
+});
+
 router.get('/google-client-id', getGoogleClientId);
 router.post('/google', handleGoogleAuth);
 

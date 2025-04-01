@@ -4,6 +4,7 @@ import { useState, useEffect, FC, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MIN_LEARNING_PERCENTAGE } from '../shared/constants';
+import { GoogleAccount } from '../types/auth';
 
 // Add API base URL constant
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
@@ -28,15 +29,6 @@ interface SubscriptionDetails {
   hadTrial: boolean;
   isCanceled: boolean;
   canceledDuringTrial: boolean;
-}
-
-type GoogleAccount = {
-  accounts: {
-    id: {
-      initialize: (config: { client_id: string; callback: (response: { credential: string; }) => void; }) => void;
-      renderButton: (element: HTMLElement, options: { theme: string; size: string; }) => void;
-    }
-  }
 }
 
 export default function SavedResponses() {
@@ -184,9 +176,46 @@ export default function SavedResponses() {
     }
   };
 
-  const handleSignOut = () => {
-    const google = (window as any).google as GoogleAccount | undefined;
-    if (google?.accounts?.id) {
+  const handleSignOut = async () => {
+    try {
+      // Call backend sign-out endpoint
+      const response = await fetch(`${API_BASE_URL}/auth/signout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to sign out');
+      }
+
+      // Clear all local storage
+      localStorage.removeItem('smoothrizz_user');
+      localStorage.removeItem('anonymous_saved_responses');
+      localStorage.removeItem('smoothrizz_usage');
+      sessionStorage.removeItem('anon_limit_triggered');
+
+      // Clear Google sign-in state if available
+      const google = (window as any).google as GoogleAccount | undefined;
+      if (google?.accounts?.id) {
+        google.accounts.id.disableAutoSelect();
+        google.accounts.id.revoke(user?.email || '', () => {
+          console.log('Google sign-in state revoked');
+        });
+      }
+
+      // Clear React state
+      setUser(null);
+      setResponses([]);
+      setSubscriptionStatus('free');
+      setSubscriptionDetails(null);
+
+      // Redirect to home page
+      router.push('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      // Even if there's an error, force sign out on frontend
       localStorage.removeItem('smoothrizz_user');
       setUser(null);
       router.push('/');
