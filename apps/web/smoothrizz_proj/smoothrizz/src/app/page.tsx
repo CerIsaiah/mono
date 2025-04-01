@@ -317,8 +317,8 @@ export default function Home() {
           console.log('Anonymous responses migration complete');
         }
 
-        // Navigate to dashboard
-        router.push('/saved');
+        // Refresh the page to ensure all components are properly updated
+        window.location.reload();
         
       } else {
         console.error('Sign-in failed:', { 
