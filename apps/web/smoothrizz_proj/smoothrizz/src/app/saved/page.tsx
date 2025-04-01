@@ -297,9 +297,37 @@ export default function SavedResponses() {
     return days;
   };
 
-  const handleCredentialResponse = (response: any) => {
-    // Handle Google Sign-In response
-    console.log('Google Sign-In response:', response);
+  const handleCredentialResponse = async (response: any) => {
+    try {
+      // Send the token to your backend for verification
+      const result = await fetch(`${API_BASE_URL}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          credential: response.credential,
+        }),
+      });
+
+      const data = await result.json();
+
+      if (result.ok) {
+        // Store user data in localStorage
+        localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
+        
+        // Update user state
+        setUser(data.user);
+        
+        // Redirect to the saved page dashboard
+        router.push('/saved');
+      } else {
+        throw new Error(data.error || 'Failed to sign in');
+      }
+    } catch (error) {
+      console.error('Error during sign-in:', error);
+      alert('Failed to sign in. Please try again.');
+    }
   };
 
   const initializeGoogleSignIn = () => {
