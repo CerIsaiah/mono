@@ -1,6 +1,6 @@
 import express, { Request, Response, Router, RequestHandler } from 'express';
 import { OAuth2Client } from 'google-auth-library';
-import { findOrCreateUser, getIPUsage } from '../db/dbOperations';
+import { findOrCreateUser, getIPUsage, getSupabaseClient } from '../db/dbOperations';
 import { GoogleAuthPayload, GoogleAuthResponse } from '../types/auth';
 import { getClientIP } from '../utils/ipUtils';
 import path from 'path';
@@ -29,11 +29,7 @@ interface RequestWithIP extends Request {
 
 // Get Google Client ID
 const getGoogleClientId: RequestHandler = (req: Request, res: Response) => {
-  console.log('Received request for Google Client ID:', {
-    timestamp: new Date().toISOString(),
-    headers: req.headers,
-    ip: req.ip
-  });
+  
 
   // Try to reinitialize client if not available
   if (!oauthClient) {
@@ -115,6 +111,15 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
       picture || null,
       anonymousSwipes
     );
+    
+    // Clear IP-based usage after transferring to user account
+    if (anonymousSwipes > 0) {
+      const supabase = getSupabaseClient();
+      await supabase
+        .from('ip_usage')
+        .update({ daily_usage: 0 })
+        .eq('ip_address', requestIP);
+    }
     
     // Check if user is premium or in trial period
     const isPremium = user.subscription_status === 'active';

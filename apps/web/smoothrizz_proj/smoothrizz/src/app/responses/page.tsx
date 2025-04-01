@@ -204,7 +204,8 @@ export default function ResponsesPage() {
             await fetch(`${API_BASE_URL}/api/saved-responses`, {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'x-user-email': parsedUser.email
               },
               body: JSON.stringify({
                 userEmail: parsedUser.email,
@@ -563,33 +564,38 @@ export default function ResponsesPage() {
   const handleSignIn = async (response: { credential: string }) => {
     try {
       const token = response.credential;
-      const payload = JSON.parse(atob(token.split('.')[1]));
       
+      // Call the Google auth endpoint to handle swipe transfer
+      const authResponse = await fetch(`${API_BASE_URL}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ credential: token })
+      });
+      
+      if (!authResponse.ok) {
+        throw new Error('Failed to authenticate with server');
+      }
+      
+      const authData = await authResponse.json();
       const user = {
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture
+        email: authData.user.email,
+        name: authData.user.name,
+        picture: authData.user.avatar_url
       };
       
       localStorage.setItem('smoothrizz_user', JSON.stringify(user));
       setUser(user);
       setIsSignedIn(true);
       setShowSignInOverlay(false);
-
-      // Check current usage after sign in
-      const usageResponse = await fetch(`${API_BASE_URL}/api/usage`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-email': user.email
-        }
-      });
-      const usageData = await usageResponse.json();
       
-      // Update usage count
-      setUsageCount(usageData.dailySwipes || 0);
+      // Update usage count from auth response
+      setUsageCount(authData.dailySwipes || 0);
+      setIsPremium(authData.isPremium || authData.isTrial);
 
       // If user has exceeded the anonymous limit, redirect to home
-      if (!usageData.isPremium && usageData.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
+      if (!authData.isPremium && authData.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
         router.push('/');
         return;
       }
