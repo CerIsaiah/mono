@@ -5,6 +5,7 @@ import { GoogleAuthPayload, GoogleAuthResponse } from '../types/auth';
 import { getClientIP } from '../utils/ipUtils';
 import path from 'path';
 import dotenv from 'dotenv';
+import { logger } from '../utils/logger';
 
 const router: Router = express.Router();
 
@@ -13,7 +14,7 @@ function initializeOAuthClient(): OAuth2Client | null {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   
   if (!clientId) {
-    console.error('Google Client ID is missing');
+    logger.error('Google Client ID is missing');
     return null;
   }
 

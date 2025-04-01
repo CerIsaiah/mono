@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { ParsedQs } from 'qs';
+import { logger } from '../utils/logger';
 
 // Initialize Stripe only if API key is available
 let stripe: Stripe | null = null;
@@ -36,14 +37,14 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
   try {
     // Check if Stripe is properly configured
     if (!stripe) {
-      console.error('Stripe configuration error in checkout route');
+      logger.error('Stripe configuration error in checkout route');
       return res.status(500).json({ error: 'Stripe is not properly configured' });
     }
 
     const { userId, userEmail } = req.body;
     const normalizedUserEmail = userEmail?.toLowerCase().trim();
 
-    console.log('Received request body:', req.body);
+    logger.info('Received request body', req.body);
 
     // Handle both userId and userEmail
     let userQuery;
@@ -60,16 +61,16 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
         .eq('email', normalizedUserEmail)
         .single();
     } else {
-      console.log('No user identifier provided');
+      logger.warn('No user identifier provided');
       return res.status(401).json({ error: 'Please sign in to continue with checkout' });
     }
 
     const { data: user, error: dbError } = await userQuery;
 
-    console.log('Supabase query result:', { user, dbError });
+    logger.info('Supabase query result', { user, dbError });
 
     if (dbError || !user) {
-      console.error('Database error or user not found:', { dbError, userId, userEmail });
+      logger.error('Database error or user not found', { dbError, userId, userEmail });
       // Distinguish between DB error and user not found
       const status = dbError ? 500 : 404;
       const message = dbError ? 'Database error fetching user' : 'User not found';
@@ -79,12 +80,11 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
     // If user has already had a trial, don't allow another one
     // Note: We check trial_started_at which is set when checkout.session.completed webhook is processed
     if (user.trial_started_at) {
-       console.log(`User ${user.email} already had a trial, preventing new checkout.`);
-       return res.status(400).json({ error: 'Trial period has already been used' });
+      logger.warn('User already had a trial', { email: user.email });
+      return res.status(400).json({ error: 'Trial period has already been used' });
     }
 
-
-    console.log('Found user:', { userId: user.id, email: user.email });
+    logger.info('Found user', { userId: user.id, email: user.email });
 
     // Ensure URLs have https:// prefix
     const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || 'mono-production-8ef9.up.railway.app';
@@ -134,7 +134,7 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
       // customer: user.stripe_customer_id || undefined, // Use existing customer if available
     });
 
-    console.log('Checkout session created:', {
+    logger.info('Checkout session created', {
       id: session.id,
       success_url: session.success_url,
       cancel_url: session.cancel_url
@@ -142,7 +142,10 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
     res.json({ url: session.url });
 
   } catch (error: any) {
-    console.error('Detailed error in checkout session:', error);
+    logger.error('Detailed error in checkout session', {
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: error.message || 'Error creating checkout session. Please try again.' });
   }
 });

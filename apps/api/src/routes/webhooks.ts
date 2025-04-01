@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '../utils/logger';
 
 // Add basic console log to verify the file is loaded
 console.log('Webhook route file loaded');
@@ -366,8 +367,8 @@ router.post('/', async (req: Request, res: Response) => {
       res.json({ received: true });
 
   } catch (error: any) {
-    console.error('❌ Webhook processing error:', {
-      message: error.message,
+    logger.error('Webhook processing error', {
+      error: error.message,
       stack: error.stack
     });
     // Send error response but still status 200 if possible, unless it's a client error (4xx)

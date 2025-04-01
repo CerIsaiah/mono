@@ -8,6 +8,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { RESET_TIMEZONE } from './usageTracking';
 import { ANONYMOUS_USAGE_LIMIT, FREE_USER_DAILY_LIMIT} from '../shared/constants';
+import { logger } from '../utils/logger';
 
 
 // Types
@@ -120,7 +121,14 @@ export async function getUserData(email: string): Promise<User> {
       .eq('email', email.trim().toLowerCase())
       .maybeSingle();
       
-    if (error) throw error;
+    if (error) {
+      logger.error('getUserData failed', {
+        error: error.message,
+        stack: error.stack,
+        email
+      });
+      throw error;
+    }
     
     if (!data) {
       const { data: newUser, error: createError } = await supabase
@@ -154,8 +162,12 @@ export async function getUserData(email: string): Promise<User> {
     
     return data as User;
     
-  } catch (error) {
-    console.error('getUserData failed:', error);
+  } catch (error: any) {
+    logger.error('getUserData failed', {
+      error: error.message,
+      stack: error.stack,
+      email
+    });
     throw error;
   }
 }
@@ -187,8 +199,12 @@ export async function getIPUsage(ip: string): Promise<IPUsage> {
       daily_usage: 0, 
       total_usage: 0 
     };
-  } catch (error) {
-    console.error('getIPUsage failed:', error);
+  } catch (error: any) {
+    logger.error('getIPUsage failed', {
+      error: error.message,
+      stack: error.stack,
+      ip
+    });
     throw error;
   }
 }
@@ -281,11 +297,24 @@ export async function findOrCreateUser(
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error in findOrCreateUser', {
+        error: error.message,
+        stack: error.stack,
+        email,
+        name
+      });
+      throw error;
+    }
     return newUser as User;
 
-  } catch (error) {
-    console.error('Error in findOrCreateUser:', error);
+  } catch (error: any) {
+    logger.error('Error in findOrCreateUser', {
+      error: error.message,
+      stack: error.stack,
+      email,
+      name
+    });
     throw error;
   }
 }
@@ -399,8 +428,13 @@ export async function checkAndResetUsage(
     }
     
     return false;
-  } catch (error) {
-    console.error('Error in checkAndResetUsage:', error);
+  } catch (error: any) {
+    logger.error('Error in checkAndResetUsage', {
+      error: error.message,
+      stack: error.stack,
+      identifier,
+      isEmail
+    });
     throw error;
   }
 }
@@ -493,8 +527,13 @@ export async function incrementUsage(
       if (updateError) throw updateError;
       return { ...limitCheck, dailySwipes: newDailyUsage };
     }
-  } catch (error) {
-    console.error('Error incrementing usage:', error);
+  } catch (error: any) {
+    logger.error('Error incrementing usage', {
+      error: error.message,
+      stack: error.stack,
+      identifier,
+      isEmail
+    });
     throw error;
   }
 }
@@ -553,8 +592,13 @@ export async function checkUsageLimits(
       requiresSignIn: (ipData?.daily_usage || 0) >= ANONYMOUS_USAGE_LIMIT
     };
 
-  } catch (error) {
-    console.error('Error checking usage limits:', error);
+  } catch (error: any) {
+    logger.error('Error checking usage limits', {
+      error: error.message,
+      stack: error.stack,
+      identifier,
+      isEmail
+    });
     throw error;
   }
 }

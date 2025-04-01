@@ -3,6 +3,7 @@ import { Router } from 'express';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import { logger } from '../utils/logger';
 
 dotenv.config();
 
@@ -191,7 +192,11 @@ router.post('/openai', async (req, res) => {
       requestId: crypto.randomUUID(),
     });
   } catch (error: any) {
-    console.error('Error:', error);
+    logger.error('OpenAI API error', {
+      error: error.message,
+      stack: error.stack,
+      requestId: crypto.randomUUID()
+    });
     return res.status(500).json({
       error: error.message,
       requestId: crypto.randomUUID(),

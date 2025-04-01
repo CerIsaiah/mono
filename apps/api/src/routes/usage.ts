@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { checkUsageStatus, UsageStatus } from '../db/usageTracking';
 import { checkAndResetUsage } from '../db/dbOperations';
 import { getClientIP } from '../utils/ipUtils';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/', async (req: Request, res: Response) => {
     
     // First check if we need to reset
     const wasReset = await checkAndResetUsage(identifier, isEmail);
-    console.log('Usage check reset status:', { identifier, wasReset });
+    logger.info('Usage check reset status', { identifier, wasReset });
     
     // Then get the current usage status (which will now reflect any reset)
     const usageStatus = await checkUsageStatus(identifier, isEmail, userName, userPicture);
@@ -30,7 +31,10 @@ router.get('/', async (req: Request, res: Response) => {
     
     res.json(response);
   } catch (error: any) {
-    console.error('Error checking usage status:', error);
+    logger.error('Error checking usage status', {
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
