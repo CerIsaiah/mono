@@ -31,6 +31,7 @@ const supabase = createClient(
 
 logger.info('Supabase client initialized');
 
+logger.info('Cancel subscription route initialized');
 const router = Router();
 
 interface CancelSubscriptionBody {
@@ -89,7 +90,7 @@ router.post('/', async (req: Request<{}, {}, CancelSubscriptionBody>, res: Respo
 
 
     // Get user data including stripe_customer_id
-    logger.info('Fetching user data from Supabase', {
+    logger.info('Fetching user data from Supabase for cancellation', {
       requestId,
       lookupCriteria: lookupCriteria.label
     });
