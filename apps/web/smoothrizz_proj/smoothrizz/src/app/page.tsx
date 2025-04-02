@@ -548,6 +548,9 @@ export default function Home() {
           const data = await response.json();
           
           if (!response.ok) {
+            await logEvent('subscription_check_success', {
+              error: data.error || 'Failed to check subscription status'
+            });
             throw new Error(data.error || 'Failed to check subscription status');
           }
 
@@ -1164,24 +1167,47 @@ export default function Home() {
               <Link
                 href="/saved"
                 className="px-4 py-2 rounded-full text-white text-sm font-medium bg-gray-900 hover:bg-gray-800 transition-colors shadow-sm flex items-center gap-2"
-                onClick={async () => {
-                  await logEvent('dashboard_navigation', {
-                    timestamp: new Date().toISOString(),
-                    userEmail: user?.email,
-                    pathname: window.location.pathname,
-                    isPremium: isPremium,
-                    dailySwipes: usageCount,
-                    currentStep: Object.entries(completedSteps)
-                      .filter(([_, completed]) => completed)
-                      .length,
-                    completedSteps,
-                    mode,
-                    hasFile: !!selectedFile,
-                    hasTextInput: showTextInput,
-                    hasContext: !!context,
-                    hasLastText: !!lastText,
-                    userAgent: window.navigator.userAgent
-                  });
+                onClick={async (e) => {
+                  try {
+                    await logEvent('dashboard_navigation_attempt', {
+                      timestamp: new Date().toISOString(),
+                      userEmail: user?.email,
+                      pathname: window.location.pathname,
+                      isPremium: isPremium,
+                      dailySwipes: usageCount,
+                      currentStep: Object.entries(completedSteps)
+                        .filter(([_, completed]) => completed)
+                        .length,
+                      completedSteps,
+                      mode,
+                      hasFile: !!selectedFile,
+                      hasTextInput: showTextInput,
+                      hasContext: !!context,
+                      hasLastText: !!lastText,
+                      userAgent: window.navigator.userAgent
+                    });
+
+                    // If navigation fails, this code will still run
+                    await logEvent('dashboard_navigation_success', {
+                      timestamp: new Date().toISOString(),
+                      userEmail: user?.email,
+                      pathname: window.location.pathname
+                    });
+
+                  } catch (error) {
+                    // Log the error
+                    await logEvent('dashboard_navigation_error', {
+                      error: error instanceof Error ? error.message : 'Unknown error',
+                      userEmail: user?.email,
+                      pathname: window.location.pathname,
+                      timestamp: new Date().toISOString()
+                    });
+                    
+                    // Prevent default navigation if logging fails
+                    e.preventDefault();
+                    console.error('Error during dashboard navigation:', error);
+                    alert('There was an error navigating to the dashboard. Please try again.');
+                  }
                 }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
