@@ -36,7 +36,10 @@ router.get('/status', async (req: Request, res: Response) => {
       ? req.query.userEmail.toLowerCase().trim()
       : undefined;
 
+    console.log('[Subscription Status] Request params:', { userId, userEmail });
+
     if (!userId && !userEmail) {
+      console.log('[Subscription Status] Missing userId and userEmail');
       return res.status(400).json({ error: 'User ID or email is required' });
     }
 
@@ -64,9 +67,17 @@ router.get('/status', async (req: Request, res: Response) => {
     const { data: user, error } = await query.single();
 
     if (error) {
-      console.error('Error fetching subscription:', error);
+      console.error('[Subscription Status] Supabase query error:', error);
       return res.status(500).json({ error: 'Failed to fetch subscription status' });
     }
+
+    console.log('[Subscription Status] User data:', {
+      email: user?.email,
+      subscription_type: user?.subscription_type,
+      subscription_status: user?.subscription_status,
+      is_trial: user?.is_trial,
+      has_stripe_customer: !!user?.stripe_customer_id
+    });
 
     // Default to standard type and inactive status
     let details: SubscriptionDetails = {
@@ -86,26 +97,35 @@ router.get('/status', async (req: Request, res: Response) => {
       const trialEndDate = user.trial_end_date ? new Date(user.trial_end_date) : null;
       const subscriptionEndDate = user.subscription_end_date ? new Date(user.subscription_end_date) : null;
 
-      // First check if user has an active premium subscription
+      console.log('[Subscription Status] Dates:', {
+        now: now.toISOString(),
+        trialEndDate: trialEndDate?.toISOString(),
+        subscriptionEndDate: subscriptionEndDate?.toISOString()
+      });
+
       if (user.subscription_status === 'active' && user.subscription_type === 'premium') {
+        console.log('[Subscription Status] Active premium subscription detected');
         status = 'premium';
         details.type = 'premium';
         details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
       }
-      // Then check if trial is active
       else if (user.is_trial && trialEndDate && trialEndDate > now) {
+        console.log('[Subscription Status] Active trial detected', {
+          cancelAtPeriodEnd: user.cancel_at_period_end
+        });
         status = user.cancel_at_period_end ? 'trial-canceling' : 'trial';
-        details.type = 'premium'; // Trial users get premium features
+        details.type = 'premium';
         details.isTrialActive = true;
         details.trialEndsAt = trialEndDate.toISOString();
         details.canceledDuringTrial = user.cancel_at_period_end;
       }
-      // Only check Stripe if user has a customer ID
       else if (user.stripe_customer_id && stripe) {
+        console.log('[Subscription Status] Checking Stripe customer:', user.stripe_customer_id);
         try {
           const customer = await stripe.customers.retrieve(user.stripe_customer_id);
           
           if (customer.deleted) {
+            console.log('[Subscription Status] Stripe customer was deleted');
             // Customer was deleted in Stripe, reset their data
             await supabase
               .from('users')
@@ -119,11 +139,17 @@ router.get('/status', async (req: Request, res: Response) => {
               })
               .eq('email', user.email);
           } else {
-            // Check active subscriptions
+            console.log('[Subscription Status] Checking Stripe subscriptions');
             const subscriptions = await stripe.subscriptions.list({
               customer: user.stripe_customer_id,
               status: 'active',
               limit: 1
+            });
+
+            console.log('[Subscription Status] Stripe subscriptions found:', {
+              count: subscriptions.data.length,
+              firstSubscription: subscriptions.data[0]?.id,
+              cancelAt: subscriptions.data[0]?.cancel_at
             });
 
             if (subscriptions.data.length > 0) {
@@ -138,6 +164,11 @@ router.get('/status', async (req: Request, res: Response) => {
             }
           }
         } catch (stripeError: any) {
+          console.error('[Subscription Status] Stripe error:', {
+            code: stripeError?.code,
+            message: stripeError?.message,
+            type: stripeError?.type
+          });
           if (stripeError?.code === 'resource_missing') {
             // Customer doesn't exist in Stripe, reset their data
             await supabase
@@ -166,12 +197,13 @@ router.get('/status', async (req: Request, res: Response) => {
       details.hadTrial = status === 'free' && !!user.trial_started_at;
     }
 
+    console.log('[Subscription Status] Final response:', { status, details });
     res.json({
       status,
       details
     });
   } catch (error: any) {
-    console.error('Error checking subscription status:', error);
+    console.error('[Subscription Status] Unexpected error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
