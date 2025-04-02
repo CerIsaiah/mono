@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MIN_LEARNING_PERCENTAGE } from '../shared/constants';
 import { GoogleAccount } from '../types/auth';
+import { 
+  SubscriptionDetails, 
+  SubscriptionResponse, 
+  SubscriptionStatusType,
+  isPremiumStatus,
+  checkSubscriptionStatus
+} from '../shared/types/subscription';
 
 // Add API base URL constant
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
@@ -22,16 +29,6 @@ interface User {
   picture?: string;
 }
 
-interface SubscriptionDetails {
-  type: string | null;
-  isTrialActive: boolean;
-  trialEndsAt: string | null;
-  subscriptionEndsAt: string | null;
-  hadTrial: boolean;
-  isCanceled: boolean;
-  canceledDuringTrial: boolean;
-}
-
 export default function SavedResponses() {
   const [activeTab, setActiveTab] = useState<'saved' | 'profile'>('saved');
   const [responses, setResponses] = useState<SavedResponse[]>([]);
@@ -47,7 +44,7 @@ export default function SavedResponses() {
   const [copySuccess, setCopySuccess] = useState(false);
   const [matchPercentage, setMatchPercentage] = useState(MIN_LEARNING_PERCENTAGE);
   const router = useRouter();
-  const [subscriptionStatus, setSubscriptionStatus] = useState<'free' | 'trial' | 'premium' | 'trial-canceling' | 'canceling'>('free');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusType>('free');
   const [isSignedIn, setIsSignedIn] = useState<boolean>(false);
   const [usageCount, setUsageCount] = useState<number>(0);
   const [isPremium, setIsPremium] = useState<boolean>(false);
@@ -157,20 +154,38 @@ export default function SavedResponses() {
     const fetchSubscriptionStatus = async () => {
       if (user?.email) {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
-          if (!response.ok) {
-            throw new Error('Failed to fetch subscription status');
-          }
-          const data = await response.json();
+          const data = await checkSubscriptionStatus(user.email, API_BASE_URL);
           console.log('Subscription status response:', data);
+          
+          // Update subscription states based on response
           setSubscriptionStatus(data.status);
           setSubscriptionDetails(data.details);
-          setIsPremium(data.status === 'premium' || data.status === 'trial');
+          setIsPremium(isPremiumStatus(data.status));
+          setUsageCount(data.usage?.daily || 0);
+          
+          // Log the state update for debugging
+          console.log('Updated subscription state:', {
+            status: data.status,
+            details: data.details,
+            isPremium: isPremiumStatus(data.status),
+            usage: data.usage,
+            debug: data.debug
+          });
         } catch (error) {
           console.error('Error fetching subscription status:', error);
-          // Reset to default state on error
+          // On error, maintain current state but mark as free
           setSubscriptionStatus('free');
-          setSubscriptionDetails(null);
+          setSubscriptionDetails({
+            type: 'standard',
+            isTrialActive: false,
+            trialEndsAt: null,
+            subscriptionEndsAt: null,
+            hadTrial: false,
+            isCanceled: false,
+            canceledDuringTrial: false
+          });
+          setIsPremium(false);
+          setUsageCount(0);
         }
       }
       setIsLoading(false);

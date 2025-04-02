@@ -20,20 +20,22 @@ const supabase = createClient(
 const router = Router();
 
 interface User {
-  subscription_type: any;
-  subscription_status: any;
-  is_trial: any;
-  trial_end_date: any;
-  subscription_end_date: any;
-  email: any;
-  cancel_at_period_end: any;
-  trial_started_at: any;
-  stripe_customer_id: any;
+  subscription_type: 'standard' | 'premium';
+  subscription_status: 'active' | 'inactive';
+  is_trial: boolean;
+  trial_end_date: string | null;
+  subscription_end_date: string | null;
+  email: string;
+  cancel_at_period_end: boolean;
+  trial_started_at: string | null;
+  stripe_customer_id: string | null;
   had_trial: boolean;
+  daily_usage: number;
+  total_usage: number;
 }
 
 interface SubscriptionDetails {
-  type: 'standard' | 'premium' | null;
+  type: 'standard' | 'premium';
   isTrialActive: boolean;
   trialEndsAt: string | null;
   subscriptionEndsAt: string | null;
@@ -69,7 +71,9 @@ router.get('/status', async (req: Request, res: Response) => {
         cancel_at_period_end,
         trial_started_at,
         stripe_customer_id,
-        had_trial
+        had_trial,
+        daily_usage,
+        total_usage
       `);
 
     if (userId) {
@@ -80,63 +84,76 @@ router.get('/status', async (req: Request, res: Response) => {
     
     const { data: user, error } = await query.single();
 
-    if (error) {
+    if (error || !user) {
       console.error('[Subscription Status] Supabase query error:', error);
-      return res.status(500).json({ error: 'Failed to fetch subscription status' });
+      return res.status(404).json({ 
+        error: 'User not found',
+        details: error?.message || 'Failed to fetch subscription status'
+      });
     }
 
     console.log('[Subscription Status] User data:', {
       email: user?.email,
-      subscription_type: user?.subscription_type,
-      subscription_status: user?.subscription_status,
-      is_trial: user?.is_trial,
-      has_stripe_customer: !!user?.stripe_customer_id
+      subscription_type: user?.subscription_type || 'standard',
+      subscription_status: user?.subscription_status || 'inactive',
+      is_trial: Boolean(user?.is_trial),
+      has_stripe_customer: Boolean(user?.stripe_customer_id),
+      daily_usage: user?.daily_usage || 0,
+      total_usage: user?.total_usage || 0
     });
 
-    // Check subscription status
-    const isPremium = user.subscription_status === 'active' && user.subscription_type === 'premium';
+    // Check subscription status with safe defaults
+    const isPremium = (user.subscription_status === 'active' && user.subscription_type === 'premium');
     const isTrialActive = Boolean(user.is_trial && 
       user.trial_end_date && 
       new Date(user.trial_end_date) > new Date());
 
-    console.log('[Subscription Status] Status check:', {
-      email: user.email,
-      isPremium,
-      isTrialActive,
-      subscriptionStatus: user.subscription_status,
-      subscriptionType: user.subscription_type,
-      trialEndDate: user.trial_end_date,
-      timestamp: new Date().toISOString()
-    });
-
-    // Determine the status
+    // Determine the status based on subscription state
     let status: 'free' | 'trial' | 'premium' | 'trial-canceling' | 'canceling';
+    
     if (isTrialActive) {
-      status = user.subscription_status === 'canceled' ? 'trial-canceling' : 'trial';
+      // Trial status
+      status = user.cancel_at_period_end ? 'trial-canceling' : 'trial';
     } else if (isPremium) {
-      status = user.subscription_status === 'canceled' ? 'canceling' : 'premium';
+      // Premium status
+      status = user.cancel_at_period_end ? 'canceling' : 'premium';
     } else {
+      // Free status (inactive subscription or non-premium type)
       status = 'free';
     }
 
     const response = {
       status,
       details: {
-        type: user.subscription_type,
+        type: user.subscription_type || 'standard',
         isTrialActive,
-        trialEndsAt: user.trial_end_date || null,
-        subscriptionEndsAt: user.subscription_end_date || null,
+        trialEndsAt: user.trial_end_date,
+        subscriptionEndsAt: user.subscription_end_date,
         hadTrial: Boolean(user.had_trial),
-        isCanceled: user.subscription_status === 'canceled',
-        canceledDuringTrial: user.subscription_status === 'canceled' && isTrialActive
+        isCanceled: Boolean(user.cancel_at_period_end),
+        canceledDuringTrial: Boolean(user.cancel_at_period_end && isTrialActive)
+      },
+      usage: {
+        daily: user.daily_usage || 0,
+        total: user.total_usage || 0
+      },
+      // Include raw subscription data for debugging
+      debug: {
+        subscription_status: user.subscription_status || 'inactive',
+        subscription_type: user.subscription_type || 'standard',
+        is_trial: Boolean(user.is_trial),
+        cancel_at_period_end: Boolean(user.cancel_at_period_end)
       }
     };
 
-    console.log('[Subscription Status] Final response:', { status, response });
+    console.log('[Subscription Status] Final response:', response);
     res.json(response);
   } catch (error: any) {
     console.error('[Subscription Status] Unexpected error:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message || 'Failed to process subscription status'
+    });
   }
 });
 

@@ -10,6 +10,10 @@ import Image from 'next/image';
 import { UpgradePopup } from './components/UpgradePopup';
 import { convertFileToBase64 } from './openai';
 import { Analytics } from "@vercel/analytics/react"
+import { 
+  isPremiumStatus,
+  checkSubscriptionStatus
+} from './shared/types/subscription';
 
 // Types
 interface User {
@@ -263,7 +267,7 @@ export default function Home() {
             if (statusResponse.ok) {
               const statusData = await statusResponse.json();
               console.log('Subscription status:', statusData);
-              setIsPremium(statusData.status === 'premium' || statusData.status === 'trial');
+              setIsPremium(isPremiumStatus(statusData.status));
             }
             
             return; // Exit if session is valid
@@ -661,7 +665,7 @@ export default function Home() {
 
   // Update the useEffect that checks subscription status
   useEffect(() => {
-    const checkSubscriptionStatus = async () => {
+    const checkSubscriptionStatusEffect = async () => {
       if (isSignedIn && user?.email) {
         try {
           await logEvent('subscription_check_start', {
@@ -670,46 +674,40 @@ export default function Home() {
           });
 
           console.log('Checking subscription status for', user.email);
-          const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
-          
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            await logEvent('subscription_check_error', {
-              error: errorData.error || `HTTP ${response.status}: ${response.statusText}`
-            });
-            throw new Error(errorData.error || 'Failed to check subscription status');
-          }
-          
-          const data = await response.json();
-          console.log('Subscription status response:', data);
+          try {
+            const data = await checkSubscriptionStatus(user.email, API_BASE_URL);
+            console.log('Subscription status response:', data);
 
-          // Update isPremium based on both premium and trial status
-          const newPremiumStatus = data.status === 'premium' || data.status === 'trial';
-          setIsPremium(newPremiumStatus);
-          
-          await logEvent('subscription_check_success', {
-            userEmail: user.email,
-            status: data.status,
-            isPremium: newPremiumStatus,
-            dailySwipes: usageCount
-          });
-          
-          // If user is premium/trial, reset usage count
-          if (data.status === 'premium' || data.status === 'trial') {
-            setUsageCount(0);
-            setShowUpgradePopup(false); // Ensure upgrade popup is hidden
+            // Update isPremium based on both premium and trial status
+            const newPremiumStatus = isPremiumStatus(data.status);
+            setIsPremium(newPremiumStatus);
+            
+            await logEvent('subscription_check_success', {
+              userEmail: user.email,
+              status: data.status,
+              isPremium: newPremiumStatus,
+              dailySwipes: usageCount
+            });
+            
+            // If user is premium/trial, reset usage count
+            if (newPremiumStatus) {
+              setUsageCount(0);
+              setShowUpgradePopup(false); // Ensure upgrade popup is hidden
+            }
+          } catch (error) {
+            await logEvent('subscription_check_error', {
+              userEmail: user.email,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              currentStatus: {
+                isPremium,
+                usageCount
+              }
+            });
+            console.error('Error checking subscription status:', error);
+            // Don't change isPremium status on error - keep the current state
           }
         } catch (error) {
-          await logEvent('subscription_check_error', {
-            userEmail: user.email,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            currentStatus: {
-              isPremium,
-              usageCount
-            }
-          });
-          console.error('Error checking subscription status:', error);
-          // Don't change isPremium status on error - keep the current state
+          console.error('Error in subscription check process:', error);
         }
       } else {
         await logEvent('subscription_check_skip', {
@@ -719,7 +717,7 @@ export default function Home() {
       }
     };
 
-    checkSubscriptionStatus();
+    checkSubscriptionStatusEffect();
   }, [isSignedIn, user, usageCount, isPremium]);
 
   // Add handleCheckout function
