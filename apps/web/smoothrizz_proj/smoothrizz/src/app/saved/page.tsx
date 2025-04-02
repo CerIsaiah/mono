@@ -108,9 +108,7 @@ export default function SavedResponses() {
 
         const authData = await response.json();
         console.log('Auth verification successful', { 
-          email: authData.user.email,
-          isPremium: authData.isPremium,
-          isTrial: authData.isTrial
+          email: authData.user.email
         });
         
         const userData: User = {
@@ -122,8 +120,6 @@ export default function SavedResponses() {
 
         setUser(userData);
         setIsSignedIn(true);
-        setUsageCount(authData.dailySwipes || 0);
-        setIsPremium(authData.isPremium || authData.isTrial);
         
         // Fetch saved responses for the user
         console.log('Fetching saved responses...');
