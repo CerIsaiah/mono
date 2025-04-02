@@ -18,7 +18,8 @@ interface SavedResponse {
 interface User {
   id: string;
   email: string;
-  name: string;
+  name?: string;
+  picture?: string;
 }
 
 interface SubscriptionDetails {
@@ -47,12 +48,97 @@ export default function SavedResponses() {
   const [matchPercentage, setMatchPercentage] = useState(MIN_LEARNING_PERCENTAGE);
   const router = useRouter();
   const [subscriptionStatus, setSubscriptionStatus] = useState<'free' | 'trial' | 'premium' | 'trial-canceling' | 'canceling'>('free');
+  const [isSignedIn, setIsSignedIn] = useState<boolean>(false);
+  const [usageCount, setUsageCount] = useState<number>(0);
+  const [isPremium, setIsPremium] = useState<boolean>(false);
 
   useEffect(() => {
-    // Check if user is logged in
-    const storedUser = localStorage.getItem('smoothrizz_user');
-    setUser(storedUser ? JSON.parse(storedUser) : null);
-  }, []);
+    const checkAuth = async () => {
+      try {
+        // Get the client ID
+        const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+        if (!clientIdResponse.ok) {
+          console.log('Failed to get Google client ID, redirecting to home');
+          router.push('/');
+          return;
+        }
+        
+        const { clientId } = await clientIdResponse.json();
+        if (!clientId) {
+          console.log('No client ID received, redirecting to home');
+          router.push('/');
+          return;
+        }
+
+        // Initialize Google Sign-In
+        if (!window.google?.accounts?.id) {
+          console.log('Google Sign-In not initialized, redirecting to home');
+          router.push('/');
+          return;
+        }
+
+        // Get the current credential
+        const credential = await new Promise<string>((resolve, reject) => {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (response) => {
+              if (response.credential) {
+                resolve(response.credential);
+              } else {
+                reject(new Error('No credential received'));
+              }
+            }
+          });
+        });
+
+        // Verify auth status with backend using Google auth endpoint
+        const response = await fetch(`${API_BASE_URL}/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ credential })
+        });
+
+        if (!response.ok) {
+          console.log('Auth verification failed, redirecting to home');
+          router.push('/');
+          return;
+        }
+
+        const authData = await response.json();
+        const userData: User = {
+          id: authData.user.id,
+          email: authData.user.email,
+          name: authData.user.name,
+          picture: authData.user.avatar_url
+        };
+
+        setUser(userData);
+        setIsSignedIn(true);
+        setUsageCount(authData.dailySwipes || 0);
+        setIsPremium(authData.isPremium || authData.isTrial);
+        
+        // Fetch saved responses for the user
+        const savedResponse = await fetch(`${API_BASE_URL}/api/saved-responses`, {
+          headers: {
+            'x-user-email': userData.email
+          }
+        });
+        
+        if (savedResponse.ok) {
+          const savedData = await savedResponse.json();
+          setResponses(savedData.responses || []);
+        }
+
+      } catch (error) {
+        console.error('Auth check error:', error);
+        router.push('/');
+      }
+    };
+    
+    checkAuth();
+  }, [router]);
 
   useEffect(() => {
     const fetchSubscriptionStatus = async () => {
@@ -76,36 +162,6 @@ export default function SavedResponses() {
     };
 
     fetchSubscriptionStatus();
-  }, [user]);
-
-  useEffect(() => {
-    const fetchResponses = async () => {
-      setIsLoading(true);
-      if (user?.email) {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/saved-responses`, {
-            headers: {
-              'x-user-email': user.email,
-            },
-          });
-          const data = await response.json();
-          
-          if (response.ok) {
-            setResponses(data.responses);
-          } else {
-            throw new Error(data.error);
-          }
-        } catch (error) {
-          console.error('Error fetching saved responses:', error);
-        }
-      } else {
-        const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
-        setResponses(savedResponses);
-      }
-      setIsLoading(false);
-    };
-
-    fetchResponses();
   }, [user]);
 
   useEffect(() => {

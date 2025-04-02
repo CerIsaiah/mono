@@ -220,6 +220,83 @@ export default function Home() {
     }
   }, [isSignedIn, user]);
 
+  // Update the useEffect that handles auth check
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        // First get the client ID
+        const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+        if (!clientIdResponse.ok) {
+          console.log('Failed to get Google client ID');
+          setIsSignedIn(false);
+          return;
+        }
+        
+        const { clientId } = await clientIdResponse.json();
+        if (!clientId) {
+          console.log('No client ID received');
+          setIsSignedIn(false);
+          return;
+        }
+
+        // Initialize Google Sign-In
+        if (!window.google?.accounts?.id) {
+          console.log('Google Sign-In not initialized');
+          setIsSignedIn(false);
+          return;
+        }
+
+        // Get the current credential
+        const credential = await new Promise<string>((resolve, reject) => {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (response) => {
+              if (response.credential) {
+                resolve(response.credential);
+              } else {
+                reject(new Error('No credential received'));
+              }
+            }
+          });
+        });
+
+        // Verify auth status with backend using Google auth endpoint
+        const response = await fetch(`${API_BASE_URL}/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ credential })
+        });
+
+        if (!response.ok) {
+          console.log('Auth verification failed');
+          setIsSignedIn(false);
+          return;
+        }
+
+        const authData = await response.json();
+        const userData = {
+          email: authData.user.email,
+          name: authData.user.name,
+          picture: authData.user.avatar_url
+        };
+
+        setUser(userData);
+        setIsSignedIn(true);
+        setUsageCount(authData.dailySwipes || 0);
+        setIsPremium(authData.isPremium || authData.isTrial);
+
+      } catch (error) {
+        console.error('Auth check error:', error);
+        setIsSignedIn(false);
+        setUser(null);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
   // Update the useEffect that handles Google Sign-In initialization
   useEffect(() => {
     const storedUser = localStorage.getItem('smoothrizz_user');

@@ -199,36 +199,85 @@ export default function ResponsesPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const savedUser = localStorage.getItem('smoothrizz_user');
-        if (savedUser) {
-          const parsedUser = JSON.parse(savedUser);
-          setUser(parsedUser);
-          setIsSignedIn(true);
-          
-          // Only migrate anonymous responses if needed
-          const anonymousResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
-          if (anonymousResponses.length > 0) {
-            try {
-              await fetch(`${API_BASE_URL}/api/saved-responses`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-user-email': parsedUser.email
-                },
-                body: JSON.stringify({
-                  userEmail: parsedUser.email,
-                  responses: anonymousResponses
-                })
-              });
-              
-              localStorage.removeItem('anonymous_saved_responses');
-            } catch (migrateError) {
-              console.error('Error migrating anonymous responses:', migrateError);
-            }
-          }
-        } else {
-          // If no user found, redirect to home
+        // First get the client ID
+        const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+        if (!clientIdResponse.ok) {
+          throw new Error('Failed to get Google client ID');
+        }
+        
+        const { clientId } = await clientIdResponse.json();
+        if (!clientId) {
+          throw new Error('No client ID received');
+        }
+
+        // Initialize Google Sign-In and get credential
+        if (!window.google?.accounts?.id) {
+          console.log('Google Sign-In not initialized, redirecting to home');
           router.push('/');
+          return;
+        }
+
+        // Get the current credential
+        const credential = await new Promise<string>((resolve) => {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (response) => resolve(response.credential)
+          });
+        });
+
+        if (!credential) {
+          console.log('No Google credential found, redirecting to home');
+          router.push('/');
+          return;
+        }
+
+        // Verify auth status with backend using Google auth endpoint
+        const response = await fetch(`${API_BASE_URL}/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ credential })
+        });
+
+        if (!response.ok) {
+          console.log('Auth verification failed, redirecting to home');
+          router.push('/');
+          return;
+        }
+
+        const authData = await response.json();
+        const user = {
+          email: authData.user.email,
+          name: authData.user.name,
+          picture: authData.user.avatar_url
+        };
+
+        setUser(user);
+        setIsSignedIn(true);
+        setUsageCount(authData.dailySwipes || 0);
+        setIsPremium(authData.isPremium || authData.isTrial);
+
+        // Only migrate anonymous responses if needed
+        const anonymousResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
+        if (anonymousResponses.length > 0) {
+          try {
+            await fetch(`${API_BASE_URL}/api/saved-responses`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-email': user.email
+              },
+              body: JSON.stringify({
+                userEmail: user.email,
+                responses: anonymousResponses
+              })
+            });
+            
+            localStorage.removeItem('anonymous_saved_responses');
+          } catch (migrateError) {
+            console.error('Error migrating anonymous responses:', migrateError);
+          }
         }
       } catch (error) {
         console.error('Auth check error:', error);
