@@ -56,6 +56,7 @@ export default function SavedResponses() {
     const checkAuth = async () => {
       try {
         // Get the client ID
+        console.log('Fetching Google client ID...');
         const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
         if (!clientIdResponse.ok) {
           console.log('Failed to get Google client ID, redirecting to home');
@@ -77,6 +78,7 @@ export default function SavedResponses() {
           return;
         }
 
+        console.log('Authenticating with Google...');
         // Get the current credential
         const credential = await new Promise<string>((resolve, reject) => {
           window.google.accounts.id.initialize({
@@ -91,6 +93,7 @@ export default function SavedResponses() {
           });
         });
 
+        console.log('Verifying auth with backend...');
         // Verify auth status with backend using Google auth endpoint
         const response = await fetch(`${API_BASE_URL}/auth/google`, {
           method: 'POST',
@@ -107,6 +110,12 @@ export default function SavedResponses() {
         }
 
         const authData = await response.json();
+        console.log('Auth verification successful', { 
+          email: authData.user.email,
+          isPremium: authData.isPremium,
+          isTrial: authData.isTrial
+        });
+        
         const userData: User = {
           id: authData.user.id,
           email: authData.user.email,
@@ -120,6 +129,7 @@ export default function SavedResponses() {
         setIsPremium(authData.isPremium || authData.isTrial);
         
         // Fetch saved responses for the user
+        console.log('Fetching saved responses...');
         const savedResponse = await fetch(`${API_BASE_URL}/api/saved-responses`, {
           headers: {
             'x-user-email': userData.email
@@ -129,6 +139,9 @@ export default function SavedResponses() {
         if (savedResponse.ok) {
           const savedData = await savedResponse.json();
           setResponses(savedData.responses || []);
+          console.log(`Loaded ${savedData.responses?.length || 0} saved responses`);
+        } else {
+          console.error('Failed to fetch saved responses', savedResponse.status);
         }
 
       } catch (error) {
@@ -149,8 +162,10 @@ export default function SavedResponses() {
             throw new Error('Failed to fetch subscription status');
           }
           const data = await response.json();
+          console.log('Subscription status response:', data);
           setSubscriptionStatus(data.status);
           setSubscriptionDetails(data.details);
+          setIsPremium(data.status === 'premium' || data.status === 'trial');
         } catch (error) {
           console.error('Error fetching subscription status:', error);
           // Reset to default state on error
@@ -335,6 +350,7 @@ export default function SavedResponses() {
       const statusData = await statusResponse.json();
       setSubscriptionStatus(statusData.status);
       setSubscriptionDetails(statusData.details);
+      setIsPremium(statusData.status === 'premium' || statusData.status === 'trial');
 
       setShowCancelModal(true);
       setCancelSuccess(true);

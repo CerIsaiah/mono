@@ -224,6 +224,7 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        console.log('Checking authentication status...');
         // First get the client ID
         const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
         if (!clientIdResponse.ok) {
@@ -246,54 +247,84 @@ export default function Home() {
           return;
         }
 
-        // Get the current credential
-        const credential = await new Promise<string>((resolve, reject) => {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: (response) => {
-              if (response.credential) {
-                resolve(response.credential);
-              } else {
-                reject(new Error('No credential received'));
-              }
-            }
-          });
-        });
-
-        // Verify auth status with backend using Google auth endpoint
-        const response = await fetch(`${API_BASE_URL}/auth/google`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ credential })
-        });
-
-        if (!response.ok) {
-          console.log('Auth verification failed');
+        // First check if user is in localStorage
+        const storedUser = localStorage.getItem('smoothrizz_user');
+        if (!storedUser) {
+          console.log('No stored user found');
           setIsSignedIn(false);
           return;
         }
+        
+        const parsedUser = JSON.parse(storedUser);
+        console.log('Found stored user:', { email: parsedUser.email });
+        
+        // Use a silent verification approach if we have a stored user
+        try {
+          // Get the current credential
+          const credential = await new Promise<string>((resolve, reject) => {
+            window.google.accounts.id.initialize({
+              client_id: clientId,
+              callback: (response) => {
+                if (response.credential) {
+                  resolve(response.credential);
+                } else {
+                  reject(new Error('No credential received'));
+                }
+              }
+            });
+            
+            // If we can't get a credential silently within 2 seconds, continue with stored user data
+            setTimeout(() => {
+              resolve('');
+            }, 2000);
+          });
 
-        const authData = await response.json();
-        const userData = {
-          email: authData.user.email,
-          name: authData.user.name,
-          picture: authData.user.avatar_url
-        };
+          if (credential) {
+            console.log('Got Google credential, verifying with backend...');
+            // Verify auth status with backend using Google auth endpoint
+            const response = await fetch(`${API_BASE_URL}/auth/google`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ credential })
+            });
 
-        setUser(userData);
-        setIsSignedIn(true);
-        setUsageCount(authData.dailySwipes || 0);
-        setIsPremium(authData.isPremium || authData.isTrial);
-
+            if (response.ok) {
+              const authData = await response.json();
+              console.log('Auth verification successful:', { 
+                email: authData.user.email,
+                isPremium: authData.isPremium,
+                isTrial: authData.isTrial
+              });
+              
+              setUser(authData.user);
+              setIsSignedIn(true);
+              setUsageCount(authData.dailySwipes || 0);
+              setIsPremium(authData.isPremium || authData.isTrial);
+            } else {
+              console.log('Auth verification failed, using stored user data');
+              setUser(parsedUser);
+              setIsSignedIn(true);
+            }
+          } else {
+            console.log('No credential received, using stored user data');
+            setUser(parsedUser);
+            setIsSignedIn(true);
+          }
+        } catch (error) {
+          console.error('Error during auth verification:', error);
+          // Still use the stored user if verification fails
+          setUser(parsedUser);
+          setIsSignedIn(true);
+        }
       } catch (error) {
         console.error('Auth check error:', error);
         setIsSignedIn(false);
         setUser(null);
       }
     };
-
+    
     checkAuth();
   }, []);
 
@@ -625,15 +656,19 @@ export default function Home() {
             timestamp: new Date().toISOString()
           });
 
+          console.log('Checking subscription status for', user.email);
           const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
-          const data = await response.json();
           
           if (!response.ok) {
-            await logEvent('subscription_check_success', {
-              error: data.error || 'Failed to check subscription status'
+            const errorData = await response.json().catch(() => ({}));
+            await logEvent('subscription_check_error', {
+              error: errorData.error || `HTTP ${response.status}: ${response.statusText}`
             });
-            throw new Error(data.error || 'Failed to check subscription status');
+            throw new Error(errorData.error || 'Failed to check subscription status');
           }
+          
+          const data = await response.json();
+          console.log('Subscription status response:', data);
 
           // Update isPremium based on both premium and trial status
           const newPremiumStatus = data.status === 'premium' || data.status === 'trial';
@@ -661,7 +696,7 @@ export default function Home() {
             }
           });
           console.error('Error checking subscription status:', error);
-          setIsPremium(false);
+          // Don't change isPremium status on error - keep the current state
         }
       } else {
         await logEvent('subscription_check_skip', {
@@ -672,7 +707,7 @@ export default function Home() {
     };
 
     checkSubscriptionStatus();
-  }, [isSignedIn, user]);
+  }, [isSignedIn, user, usageCount, isPremium]);
 
   // Add handleCheckout function
   const handleCheckout = async () => {
@@ -1250,6 +1285,7 @@ export default function Home() {
                 className="px-4 py-2 rounded-full text-white text-sm font-medium bg-gray-900 hover:bg-gray-800 transition-colors shadow-sm flex items-center gap-2"
                 onClick={async (e) => {
                   try {
+                    // Log the navigation attempt
                     await logEvent('dashboard_navigation_attempt', {
                       timestamp: new Date().toISOString(),
                       userEmail: user?.email,
@@ -1267,14 +1303,8 @@ export default function Home() {
                       hasLastText: !!lastText,
                       userAgent: window.navigator.userAgent
                     });
-
-                    // If navigation fails, this code will still run
-                    await logEvent('dashboard_navigation_success', {
-                      timestamp: new Date().toISOString(),
-                      userEmail: user?.email,
-                      pathname: window.location.pathname
-                    });
-
+                    
+                    // Let the navigation proceed normally
                   } catch (error) {
                     // Log the error
                     await logEvent('dashboard_navigation_error', {
