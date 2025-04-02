@@ -431,8 +431,8 @@ export default function Home() {
       // Store the responses in localStorage before navigation
       localStorage.setItem('current_responses', JSON.stringify(data));
       
-      // Use window.location.href for a full page navigation
-      window.location.href = '/responses';
+      // Use router.push for client-side navigation
+      router.push('/responses');
 
     } catch (error) {
       await logEvent('submit_error', {

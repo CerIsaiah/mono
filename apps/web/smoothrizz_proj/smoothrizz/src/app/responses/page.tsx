@@ -79,12 +79,20 @@ function RegeneratePopup({ onRegenerate, onClose }: RegeneratePopupProps) {
           Would you like to generate new responses?
         </p>
         
-        <button
-          onClick={onRegenerate}
-          className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-3 rounded-lg hover:opacity-90 transition-opacity"
-        >
-          Generate New Responses
-        </button>
+        <div className="space-y-3">
+          <button
+            onClick={onRegenerate}
+            className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-3 rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Generate New Responses
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -409,77 +417,68 @@ export default function ResponsesPage() {
   const handleRegenerate = async () => {
     try {
       setIsGenerating(true);
+      let newResponses: string[] = [];
       
       // Check if we're using text input or file input
       if (lastContext && lastText) {
         // Text input path
-        const newResponses = await analyzeScreenshot(
+        newResponses = await analyzeScreenshot(
           null, // no file
           mode,
           isSignedIn,
           lastContext,
           lastText
         );
-        
-        // Update responses state and localStorage
-        setResponses(newResponses);
-        setCurrentIndex(newResponses.length - 1);
-        setKey(prevKey => prevKey + 1); // Force re-render of cards
-        
-        // Update localStorage with new responses
-        const savedData = {
-          responses: newResponses,
-          currentIndex: newResponses.length - 1,
-          mode,
-          lastFile: null, // ensure this is null for text input
-          lastContext,
-          lastText,
-          inputMode: 'text' as const // Add this to track input mode
-        };
-        localStorage.setItem('current_responses', JSON.stringify(savedData));
-        
       } else if (lastFile) {
         // Existing file input path
         const file = await base64ToFile(lastFile, 'screenshot.png');
         
         if (!file) {
-          console.error('No screenshot available for regeneration');
-          router.push('/');
-          return;
+          throw new Error('No screenshot available for regeneration');
         }
 
-        const newResponses = await analyzeScreenshot(file, mode, isSignedIn, lastContext, lastText);
-        
-        // Update responses state and localStorage
-        setResponses(newResponses);
-        setCurrentIndex(newResponses.length - 1);
-        setKey(prevKey => prevKey + 1);
-        
-        const savedData = {
-          responses: newResponses,
-          currentIndex: newResponses.length - 1,
-          mode,
-          lastFile,
-          lastContext,
-          lastText,
-          inputMode: 'screenshot' as const
-        };
-        localStorage.setItem('current_responses', JSON.stringify(savedData));
+        newResponses = await analyzeScreenshot(file, mode, isSignedIn, lastContext, lastText);
       } else {
-        console.error('No input available for regeneration');
-        router.push('/');
-        return;
+        throw new Error('No input available for regeneration');
       }
       
+      if (!newResponses || !Array.isArray(newResponses) || newResponses.length === 0) {
+        throw new Error('Invalid response from server');
+      }
+
+      // Update responses state and localStorage
+      setResponses(newResponses);
+      setCurrentIndex(newResponses.length - 1);
+      setKey(prevKey => prevKey + 1);
+      
+      // Update localStorage with new responses
+      const savedData = {
+        responses: newResponses,
+        currentIndex: newResponses.length - 1,
+        mode,
+        lastFile: lastContext && lastText ? null : lastFile,
+        lastContext,
+        lastText,
+        inputMode: (lastContext && lastText) ? 'text' as const : 'screenshot' as const
+      };
+      localStorage.setItem('current_responses', JSON.stringify(savedData));
+      
       // Update childRefs for new responses
-      childRefs.current = Array(responses.length)
+      childRefs.current = Array(newResponses.length)
         .fill(0)
         .map(() => React.createRef());
         
     } catch (error) {
       console.error('Error regenerating responses:', error);
+      if (error instanceof Error && error.message === 'No input available for regeneration') {
+        alert('Failed to generate responses. returning Home');
+        router.push('/');
+      } else {
+        alert('Failed to generate responses. Please try again.');
+      }
     } finally {
       setIsGenerating(false);
+      setShowRegeneratePopup(false);
     }
   };
 
@@ -820,7 +819,7 @@ export default function ResponsesPage() {
             handleRegenerate();
             setShowRegeneratePopup(false);
           }}
-          onClose={() => router.push('/')}
+          onClose={() => setShowRegeneratePopup(false)}
         />
       )}
 
