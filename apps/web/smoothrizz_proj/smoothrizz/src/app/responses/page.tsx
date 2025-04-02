@@ -195,76 +195,86 @@ export default function ResponsesPage() {
     }
   }, [router]);
 
-  // Auth status check effect
+  // Simplify the auth check effect
   useEffect(() => {
     const checkAuth = async () => {
-      const savedUser = localStorage.getItem('smoothrizz_user');
-      if (savedUser) {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-        setIsSignedIn(true);
-        
-        // Check for anonymous saved responses to migrate
-        const anonymousResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
-        if (anonymousResponses.length > 0) {
-          try {
-            // Migrate anonymous responses to user account
-            await fetch(`${API_BASE_URL}/api/saved-responses`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-user-email': parsedUser.email
-              },
-              body: JSON.stringify({
-                userEmail: parsedUser.email,
-                responses: anonymousResponses // Send as bulk migration
-              })
-            });
-            
-            // Clear anonymous responses after successful migration
-            localStorage.removeItem('anonymous_saved_responses');
-          } catch (error) {
-            console.error('Error migrating anonymous responses:', error);
-          }
-        }
-      }
-    };
-    checkAuth();
-  }, []); 
-
-  // Usage check effect
-  useEffect(() => {
-    const checkInitialUsage = async () => {
       try {
         const savedUser = localStorage.getItem('smoothrizz_user');
         if (savedUser) {
           const parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
           setIsSignedIn(true);
+          
+          // Only migrate anonymous responses if needed
+          const anonymousResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
+          if (anonymousResponses.length > 0) {
+            try {
+              await fetch(`${API_BASE_URL}/api/saved-responses`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-user-email': parsedUser.email
+                },
+                body: JSON.stringify({
+                  userEmail: parsedUser.email,
+                  responses: anonymousResponses
+                })
+              });
+              
+              localStorage.removeItem('anonymous_saved_responses');
+            } catch (migrateError) {
+              console.error('Error migrating anonymous responses:', migrateError);
+            }
+          }
+        } else {
+          // If no user found, redirect to home
+          router.push('/');
         }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        router.push('/');
+      }
+    };
+    
+    checkAuth();
+  }, [router]);
 
-        const headers = {
-          'Content-Type': 'application/json',
-          ...(savedUser && { 'x-user-email': JSON.parse(savedUser).email })
-        };
-
-        const response = await fetch(`${API_BASE_URL}/api/usage`, { headers });
-        const data = await response.json();
+  // Separate effect for premium status - only runs after auth is confirmed
+  useEffect(() => {
+    const checkPremiumStatus = async () => {
+      if (!user?.email) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/subscription-status`, {
+          headers: {
+            'x-user-email': user.email
+          }
+        });
         
+        if (!response.ok) {
+          throw new Error('Failed to fetch subscription status');
+        }
+        
+        const data = await response.json();
+        setIsPremium(data.isPremium);
         setUsageCount(data.dailySwipes || 0);
-        setIsPremium(data.isPremium || data.isTrial);
         
         localStorage.setItem('smoothrizz_usage', JSON.stringify({
           dailySwipes: data.dailySwipes,
-          isPremium: data.isPremium || data.isTrial
+          isPremium: data.isPremium
         }));
       } catch (error) {
-        console.error('Error checking initial usage:', error);
+        console.error('Error checking premium status:', error);
+        // Don't redirect on premium check failure, just set safe defaults
+        setIsPremium(false);
+        setUsageCount(0);
       }
     };
 
-    checkInitialUsage();
-  }, []);
+    if (isSignedIn) {
+      checkPremiumStatus();
+    }
+  }, [user?.email, isSignedIn]);
 
   // Update swiped function to handle local storage and API calls
   const swiped = async (direction: Direction, responseToDelete: string, index: number) => {
