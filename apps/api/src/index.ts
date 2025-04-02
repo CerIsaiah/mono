@@ -46,6 +46,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://smoothrizz.com',
   'https://www.smoothrizz.com',
+  'https://mono-production-8ef9.up.railway.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
