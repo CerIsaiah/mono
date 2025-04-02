@@ -19,6 +19,10 @@ declare global {
             theme: string;
             size: string;
           }) => void;
+          prompt: (callback: (notification: { 
+            isNotDisplayed: () => boolean;
+            isSkippedMoment: () => boolean;
+          }) => void) => void;
           cancel: () => void;
         };
       };

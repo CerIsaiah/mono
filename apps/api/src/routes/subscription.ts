@@ -19,6 +19,19 @@ const supabase = createClient(
 
 const router = Router();
 
+interface User {
+  subscription_type: any;
+  subscription_status: any;
+  is_trial: any;
+  trial_end_date: any;
+  subscription_end_date: any;
+  email: any;
+  cancel_at_period_end: any;
+  trial_started_at: any;
+  stripe_customer_id: any;
+  had_trial: boolean;
+}
+
 interface SubscriptionDetails {
   type: 'standard' | 'premium' | null;
   isTrialActive: boolean;
@@ -55,7 +68,8 @@ router.get('/status', async (req: Request, res: Response) => {
         email,
         cancel_at_period_end,
         trial_started_at,
-        stripe_customer_id
+        stripe_customer_id,
+        had_trial
       `);
 
     if (userId) {
@@ -79,129 +93,47 @@ router.get('/status', async (req: Request, res: Response) => {
       has_stripe_customer: !!user?.stripe_customer_id
     });
 
-    // Default to standard type and inactive status
-    let details: SubscriptionDetails = {
-      type: user?.subscription_type as 'standard' | 'premium' | null || 'standard',
-      isTrialActive: false,
-      trialEndsAt: null,
-      subscriptionEndsAt: null,
-      isCanceled: user?.cancel_at_period_end || false,
-      hadTrial: false,
-      canceledDuringTrial: false
-    };
+    // Check subscription status
+    const isPremium = user.subscription_status === 'active' && user.subscription_type === 'premium';
+    const isTrialActive = Boolean(user.is_trial && 
+      user.trial_end_date && 
+      new Date(user.trial_end_date) > new Date());
 
-    let status: 'free' | 'trial' | 'trial-canceling' | 'premium' | 'canceling' = 'free';
+    console.log('[Subscription Status] Status check:', {
+      email: user.email,
+      isPremium,
+      isTrialActive,
+      subscriptionStatus: user.subscription_status,
+      subscriptionType: user.subscription_type,
+      trialEndDate: user.trial_end_date,
+      timestamp: new Date().toISOString()
+    });
 
-    if (user) {
-      const now = new Date();
-      const trialEndDate = user.trial_end_date ? new Date(user.trial_end_date) : null;
-      const subscriptionEndDate = user.subscription_end_date ? new Date(user.subscription_end_date) : null;
-
-      console.log('[Subscription Status] Dates:', {
-        now: now.toISOString(),
-        trialEndDate: trialEndDate?.toISOString(),
-        subscriptionEndDate: subscriptionEndDate?.toISOString()
-      });
-
-      if (user.subscription_status === 'active' && user.subscription_type === 'premium') {
-        console.log('[Subscription Status] Active premium subscription detected');
-        status = 'premium';
-        details.type = 'premium';
-        details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
-      }
-      else if (user.is_trial && trialEndDate && trialEndDate > now) {
-        console.log('[Subscription Status] Active trial detected', {
-          cancelAtPeriodEnd: user.cancel_at_period_end
-        });
-        status = user.cancel_at_period_end ? 'trial-canceling' : 'trial';
-        details.type = 'premium';
-        details.isTrialActive = true;
-        details.trialEndsAt = trialEndDate.toISOString();
-        details.canceledDuringTrial = user.cancel_at_period_end;
-      }
-      else if (user.stripe_customer_id && stripe) {
-        console.log('[Subscription Status] Checking Stripe customer:', user.stripe_customer_id);
-        try {
-          const customer = await stripe.customers.retrieve(user.stripe_customer_id);
-          
-          if (customer.deleted) {
-            console.log('[Subscription Status] Stripe customer was deleted');
-            // Customer was deleted in Stripe, reset their data
-            await supabase
-              .from('users')
-              .update({
-                stripe_customer_id: null,
-                subscription_status: 'inactive',
-                subscription_type: 'standard',
-                subscription_end_date: null,
-                is_trial: false,
-                trial_end_date: null
-              })
-              .eq('email', user.email);
-          } else {
-            console.log('[Subscription Status] Checking Stripe subscriptions');
-            const subscriptions = await stripe.subscriptions.list({
-              customer: user.stripe_customer_id,
-              status: 'active',
-              limit: 1
-            });
-
-            console.log('[Subscription Status] Stripe subscriptions found:', {
-              count: subscriptions.data.length,
-              firstSubscription: subscriptions.data[0]?.id,
-              cancelAt: subscriptions.data[0]?.cancel_at
-            });
-
-            if (subscriptions.data.length > 0) {
-              status = 'premium';
-              details.type = 'premium';
-              details.subscriptionEndsAt = subscriptionEndDate?.toISOString() || null;
-              
-              if (subscriptions.data[0].cancel_at) {
-                details.isCanceled = true;
-                status = 'canceling';
-              }
-            }
-          }
-        } catch (stripeError: any) {
-          console.error('[Subscription Status] Stripe error:', {
-            code: stripeError?.code,
-            message: stripeError?.message,
-            type: stripeError?.type
-          });
-          if (stripeError?.code === 'resource_missing') {
-            // Customer doesn't exist in Stripe, reset their data
-            await supabase
-              .from('users')
-              .update({
-                stripe_customer_id: null,
-                subscription_status: 'inactive',
-                subscription_type: 'standard',
-                subscription_end_date: null,
-                is_trial: false,
-                trial_end_date: null
-              })
-              .eq('email', user.email);
-          } else {
-            console.error('Error fetching Stripe subscription:', stripeError);
-          }
-        }
-      }
-      // For users without Stripe customer ID, check if they're canceling
-      else if (user.subscription_status === 'canceling') {
-        status = 'canceling';
-        details.type = 'premium';
-      }
-
-      // Set hadTrial after all status checks
-      details.hadTrial = status === 'free' && !!user.trial_started_at;
+    // Determine the status
+    let status: 'free' | 'trial' | 'premium' | 'trial-canceling' | 'canceling';
+    if (isTrialActive) {
+      status = user.subscription_status === 'canceled' ? 'trial-canceling' : 'trial';
+    } else if (isPremium) {
+      status = user.subscription_status === 'canceled' ? 'canceling' : 'premium';
+    } else {
+      status = 'free';
     }
 
-    console.log('[Subscription Status] Final response:', { status, details });
-    res.json({
+    const response = {
       status,
-      details
-    });
+      details: {
+        type: user.subscription_type,
+        isTrialActive,
+        trialEndsAt: user.trial_end_date || null,
+        subscriptionEndsAt: user.subscription_end_date || null,
+        hadTrial: Boolean(user.had_trial),
+        isCanceled: user.subscription_status === 'canceled',
+        canceledDuringTrial: user.subscription_status === 'canceled' && isTrialActive
+      }
+    };
+
+    console.log('[Subscription Status] Final response:', { status, response });
+    res.json(response);
   } catch (error: any) {
     console.error('[Subscription Status] Unexpected error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });

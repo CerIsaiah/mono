@@ -123,7 +123,7 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
     }
     
     // Check if user is premium or in trial period
-    const isPremium = user.subscription_status === 'active';
+    const isPremium = user.subscription_status === 'active' && user.subscription_type === 'premium';
     const isTrialActive = Boolean(user.is_trial && 
       user.trial_end_date && 
       new Date(user.trial_end_date) > new Date());
@@ -132,6 +132,8 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
       email: user.email,
       isPremium,
       isTrialActive,
+      subscriptionStatus: user.subscription_status,
+      subscriptionType: user.subscription_type,
       timestamp: new Date().toISOString()
     });
 
@@ -144,7 +146,7 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
       },
       dailySwipes: user.daily_usage,
       totalSwipes: user.total_usage,
-      isPremium,
+      isPremium: isPremium || isTrialActive, // Consider both premium and trial as premium
       isTrial: isTrialActive,
       ...(isTrialActive && user.trial_end_date && {
         trialEndsAt: new Date(user.trial_end_date)
@@ -177,6 +179,76 @@ router.post('/signout', async (req: Request, res: Response) => {
     logger.error('Error during sign out:', error);
     // Even if there's an error, return success to ensure the user can sign out
     res.json({ success: true, message: 'Signed out successfully' });
+  }
+});
+
+// Verify stored session
+router.post('/verify', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    console.log('Verifying session for:', { email });
+
+    // Get user from database
+    const supabase = getSupabaseClient();
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (error || !user) {
+      console.log('User not found or error:', { error });
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    // Check if user is premium or in trial period
+    const isPremium = user.subscription_status === 'active' && user.subscription_type === 'premium';
+    const isTrialActive = Boolean(user.is_trial && 
+      user.trial_end_date && 
+      new Date(user.trial_end_date) > new Date());
+    
+    console.log('Session verification - User status:', {
+      email: user.email,
+      isPremium,
+      isTrialActive,
+      subscriptionStatus: user.subscription_status,
+      subscriptionType: user.subscription_type,
+      timestamp: new Date().toISOString()
+    });
+
+    const response: GoogleAuthResponse = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name || undefined,
+        avatar_url: user.picture || undefined,
+      },
+      dailySwipes: user.daily_usage,
+      totalSwipes: user.total_usage,
+      isPremium: isPremium || isTrialActive,
+      isTrial: isTrialActive,
+      ...(isTrialActive && user.trial_end_date && {
+        trialEndsAt: new Date(user.trial_end_date)
+      })
+    };
+
+    console.log('Session verification successful');
+    return res.json(response);
+
+  } catch (error) {
+    console.error('Session verification error:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+    return res.status(500).json({ 
+      error: 'Session verification failed: ' + (error as Error).message 
+    });
   }
 });
 
