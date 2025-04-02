@@ -539,11 +539,28 @@ export default function Home() {
     const checkSubscriptionStatus = async () => {
       if (isSignedIn && user?.email) {
         try {
+          await logEvent('subscription_check_start', {
+            userEmail: user.email,
+            timestamp: new Date().toISOString()
+          });
+
           const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
           const data = await response.json();
           
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to check subscription status');
+          }
+
           // Update isPremium based on both premium and trial status
-          setIsPremium(data.status === 'premium' || data.status === 'trial');
+          const newPremiumStatus = data.status === 'premium' || data.status === 'trial';
+          setIsPremium(newPremiumStatus);
+          
+          await logEvent('subscription_check_success', {
+            userEmail: user.email,
+            status: data.status,
+            isPremium: newPremiumStatus,
+            dailySwipes: usageCount
+          });
           
           // If user is premium/trial, reset usage count
           if (data.status === 'premium' || data.status === 'trial') {
@@ -551,9 +568,22 @@ export default function Home() {
             setShowUpgradePopup(false); // Ensure upgrade popup is hidden
           }
         } catch (error) {
+          await logEvent('subscription_check_error', {
+            userEmail: user.email,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            currentStatus: {
+              isPremium,
+              usageCount
+            }
+          });
           console.error('Error checking subscription status:', error);
           setIsPremium(false);
         }
+      } else {
+        await logEvent('subscription_check_skip', {
+          reason: !isSignedIn ? 'not_signed_in' : 'no_email',
+          timestamp: new Date().toISOString()
+        });
       }
     };
 
@@ -1140,7 +1170,17 @@ export default function Home() {
                     userEmail: user?.email,
                     pathname: window.location.pathname,
                     isPremium: isPremium,
-                    dailySwipes: usageCount
+                    dailySwipes: usageCount,
+                    currentStep: Object.entries(completedSteps)
+                      .filter(([_, completed]) => completed)
+                      .length,
+                    completedSteps,
+                    mode,
+                    hasFile: !!selectedFile,
+                    hasTextInput: showTextInput,
+                    hasContext: !!context,
+                    hasLastText: !!lastText,
+                    userAgent: window.navigator.userAgent
                   });
                 }}
               >
