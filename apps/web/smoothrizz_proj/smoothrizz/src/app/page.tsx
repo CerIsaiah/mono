@@ -428,7 +428,11 @@ export default function Home() {
         mode: mode
       });
 
-      router.push('/responses');
+      // Store the responses in localStorage before navigation
+      localStorage.setItem('current_responses', JSON.stringify(data));
+      
+      // Use window.location.href for a full page navigation
+      window.location.href = '/responses';
 
     } catch (error) {
       await logEvent('submit_error', {
