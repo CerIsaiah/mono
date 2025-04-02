@@ -140,6 +140,25 @@ declare global {
   }
 }
 
+// Add logEvent function
+const logEvent = async (event: string, data: any) => {
+  try {
+    await fetch('/api/log', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        event,
+        data,
+        timestamp: new Date().toISOString()
+      }),
+    });
+  } catch (error) {
+    console.error('Failed to log event:', error);
+  }
+};
+
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -272,7 +291,7 @@ export default function Home() {
     try {
       const { credential } = response;
       
-      console.log('Starting Google sign-in process...', {
+      await logEvent('sign_in_attempt', {
         timestamp: new Date().toISOString()
       });
       
@@ -284,50 +303,44 @@ export default function Home() {
       const data = await res.json();
       
       if (res.ok) {
-        console.log('Sign-in successful:', { 
+        await logEvent('sign_in_success', { 
           user: data.user.email,
-          timestamp: new Date().toISOString()
         });
 
-        // Set user data in localStorage first
         localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
-        
-        // Update state
         setUser(data.user);
         setIsSignedIn(true);
 
-        // Clear any existing Google Sign-In state
         if (window.google?.accounts?.id) {
           window.google.accounts.id.cancel();
         }
 
-        // Migrate anonymous saved responses if any
         const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
         if (savedResponses.length > 0) {
-          console.log('Migrating anonymous responses:', { 
-            count: savedResponses.length,
-            timestamp: new Date().toISOString()
+          await logEvent('migrate_anonymous_responses', { 
+            count: savedResponses.length
           });
+          
           await Promise.all(
             savedResponses.map(async (item: any) => {
               await logConnection('/api/saved-responses');
             })
           );
           localStorage.removeItem('anonymous_saved_responses');
-          console.log('Anonymous responses migration complete');
         }
 
-        // Refresh the page to ensure all components are properly updated
         window.location.reload();
         
       } else {
-        console.error('Sign-in failed:', { 
-          error: data.error,
-          timestamp: new Date().toISOString()
+        await logEvent('sign_in_error', { 
+          error: data.error
         });
         throw new Error(data.error || 'Failed to sign in');
       }
     } catch (error) {
+      await logEvent('sign_in_exception', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       console.error('Error signing in:', error);
       alert('Failed to sign in. Please try again.');
     }
@@ -335,7 +348,7 @@ export default function Home() {
 
   // Update the handleSubmit function
   const handleSubmit = async () => {
-    console.log('Starting handleSubmit with:', {
+    await logEvent('submit_attempt', {
       hasFile: !!selectedFile,
       hasContext: !!context,
       hasLastText: !!lastText,
@@ -345,18 +358,17 @@ export default function Home() {
     });
 
     if (!selectedFile && (!context || !lastText)) {
-      console.warn('Missing required input');
+      await logEvent('submit_validation_error', {
+        reason: 'missing_input'
+      });
       alert("Please select a screenshot or provide text input");
       return;
     }
 
     try {
       setIsGenerating(true);
-      console.log('Clearing existing responses from localStorage');
       localStorage.removeItem('current_responses');
       
-      // Check usage status before proceeding
-      console.log('Checking usage status...');
       const statusResponse = await fetch(`${API_BASE_URL}/api/usage`, {
         headers: {
           'Content-Type': 'application/json',
@@ -365,27 +377,31 @@ export default function Home() {
       });
       
       const statusData = await statusResponse.json();
-      console.log('Usage status:', statusData);
+      await logEvent('usage_check', {
+        dailySwipes: statusData.dailySwipes,
+        isPremium: statusData.isPremium,
+        isAnonymous: !isSignedIn
+      });
       
-      // For anonymous users at limit, show sign in overlay
       if (!isSignedIn && statusData.dailySwipes >= ANONYMOUS_USAGE_LIMIT) {
-        console.log('Anonymous user reached limit');
+        await logEvent('anonymous_limit_reached', {
+          swipes: statusData.dailySwipes
+        });
         setUsageCount(ANONYMOUS_USAGE_LIMIT);
         setShowSignInOverlay(true);
         return;
       }
       
-      // For signed-in users at limit, show upgrade popup
       if (isSignedIn && !statusData.isPremium && statusData.dailySwipes >= FREE_USER_DAILY_LIMIT) {
-        console.log('Free user reached limit');
+        await logEvent('free_user_limit_reached', {
+          swipes: statusData.dailySwipes
+        });
         setShowUpgradePopup(true);
         return;
       }
 
       setIsLoading(true);
       
-      console.log('Generating responses...');
-      // Generate responses using OpenAI
       const response = await fetch(`${API_BASE_URL}/api/openai`, {
         method: 'POST',
         headers: {
@@ -402,89 +418,22 @@ export default function Home() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('OpenAI API error:', errorData);
+        await logEvent('openai_api_error', errorData);
         throw new Error(errorData.error || 'Failed to generate responses');
       }
 
       const data = await response.json();
-      const responses = data.responses;
-
-      console.log('Received responses:', {
-        responseCount: responses?.length,
-        isArray: Array.isArray(responses),
-        firstResponse: responses?.[0]?.slice(0, 50) + '...'
+      await logEvent('responses_generated', {
+        responseCount: data.responses?.length,
+        mode: mode
       });
 
-      // Validate responses
-      if (!Array.isArray(responses) || responses.length === 0) {
-        console.error('Invalid response format:', responses);
-        throw new Error('Invalid response format received');
-      }
-
-      // Save new responses with error handling
-      try {
-        console.log('Preparing response data for storage');
-        const responseData: ResponseData = {
-          responses,
-          currentIndex: responses.length - 1,
-          mode,
-          lastContext: context,
-          lastText,
-          inputMode: selectedFile ? 'screenshot' : 'text',
-          timestamp: Date.now()
-        };
-
-        if (selectedFile) {
-          console.log('Converting file to base64...');
-          try {
-            const base64File = await convertFileToBase64(selectedFile);
-            if (!base64File) {
-              throw new Error('Failed to convert file to base64');
-            }
-            responseData.lastFile = base64File;
-            console.log('File conversion successful');
-          } catch (error) {
-            console.error('Error converting file to base64:', error);
-            throw new Error('Failed to process the image. Please try uploading again.');
-          }
-        }
-
-        console.log('Saving to localStorage:', {
-          responseCount: responseData.responses.length,
-          mode: responseData.mode,
-          hasFile: !!responseData.lastFile,
-          timestamp: responseData.timestamp
-        });
-
-        localStorage.setItem('current_responses', JSON.stringify(responseData));
-        console.log('Successfully saved to localStorage');
-
-        // Verify the save was successful
-        const savedData = localStorage.getItem('current_responses');
-        if (!savedData) {
-          throw new Error('Verification failed: Data not found in localStorage after save');
-        }
-
-        console.log('Navigating to responses page...');
-        router.push('/responses');
-
-      } catch (storageError) {
-        console.error('Storage error details:', {
-          error: storageError,
-          message: storageError instanceof Error ? storageError.message : 'Unknown error',
-          stack: storageError instanceof Error ? storageError.stack : undefined
-        });
-        throw new Error('Failed to save responses. Please try again.');
-      }
+      router.push('/responses');
 
     } catch (error) {
-      console.error('Main error details:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+      await logEvent('submit_error', {
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
-      
-      // More specific error messages
       if (error instanceof Error) {
         if (error.message.includes('usage limit')) {
           alert("You've reached your usage limit. Please try again later.");
@@ -496,9 +445,7 @@ export default function Home() {
           alert("Error processing input. Please try again.");
         }
       }
-      
     } finally {
-      console.log('Cleaning up...');
       setIsGenerating(false);
       setIsLoading(false);
     }
@@ -520,6 +467,12 @@ export default function Home() {
 
   // Update mode selection to track completion
   const handleModeSelection = (selectedMode: string) => {
+    logEvent('mode_selection', {
+      mode: selectedMode,
+      previousMode: mode,
+      completedSteps
+    });
+    
     setMode(selectedMode);
     setCompletedSteps(prev => ({ ...prev, stage: true }));
   };
@@ -610,12 +563,15 @@ export default function Home() {
   // Add handleCheckout function
   const handleCheckout = async () => {
     try {
+      await logEvent('checkout_attempt', {
+        userEmail: user?.email,
+        isSignedIn
+      });
+
       if (!isSignedIn || !user?.email) {
         setUsageCount(ANONYMOUS_USAGE_LIMIT + 1);
         return;
       }
-
-      console.log('Starting checkout process for user:', user.email);
 
       const response = await fetch(`${API_BASE_URL}/api/checkout`, {
         method: 'POST',
@@ -630,8 +586,10 @@ export default function Home() {
       const data = await response.json();
       
       if (!response.ok) {
-        // Handle specific error cases
         if (response.status === 400 && data.error?.includes('Trial period')) {
+          await logEvent('checkout_trial_error', {
+            error: data.error
+          });
           alert('You have already used your trial period.');
           return;
         }
@@ -639,11 +597,17 @@ export default function Home() {
       }
 
       if (data.url) {
+        await logEvent('checkout_redirect', {
+          url: data.url
+        });
         window.location.href = data.url;
       } else {
         throw new Error('No checkout URL received');
       }
     } catch (error) {
+      await logEvent('checkout_error', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       console.error('Checkout error:', error);
       alert('Error starting checkout. Please try again.');
     }
@@ -653,7 +617,11 @@ export default function Home() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Reset states first
+      logEvent('file_upload', {
+        fileSize: file.size,
+        fileType: file.type
+      });
+      
       setCompletedSteps({
         upload: false,
         stage: false,
@@ -661,25 +629,46 @@ export default function Home() {
       });
       setMode(null);
       setIsOnPreview(false);
-      
-      // Then set the new file
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setInputMode('screenshot');
       setContext('');
       setLastText('');
-      
-      // Set upload step as completed after new file is set
       setCompletedSteps(prev => ({ ...prev, upload: true }));
     }
   };
 
-  // Add handleTextInputChange function
+  // Update text input toggle
+  const handleTextInputToggle = () => {
+    const newState = !showTextInput;
+    logEvent('text_input_toggle', {
+      showTextInput: newState,
+      hasContext: !!context,
+      hasLastText: !!lastText
+    });
+    setShowTextInput(newState);
+  };
+
+  // Update handleTextInputChange
   const handleTextInputChange = (field: 'context' | 'lastText', value: string) => {
     if (field === 'context') {
       setContext(value);
+      if (value && lastText) {
+        logEvent('text_input_complete', {
+          field,
+          hasContext: true,
+          hasLastText: true
+        });
+      }
     } else if (field === 'lastText') {
       setLastText(value);
+      if (context && value) {
+        logEvent('text_input_complete', {
+          field,
+          hasContext: true,
+          hasLastText: true
+        });
+      }
     }
   };
 
@@ -687,7 +676,7 @@ export default function Home() {
   const textInputSection = (
     <div className="mt-4 transition-all duration-300">
       <button
-        onClick={() => setShowTextInput(!showTextInput)}
+        onClick={handleTextInputToggle}
         className="w-full text-gray-600 py-2 flex items-center justify-center gap-2 hover:text-gray-900"
       >
         <span>{showTextInput ? "Hide" : "Use"} text input option</span>
@@ -756,6 +745,13 @@ export default function Home() {
         const offset = 80;
         const elementPosition = element.getBoundingClientRect().top;
         const offsetPosition = elementPosition + window.pageYOffset - offset;
+        
+        logEvent('section_scroll', {
+          targetSection: id,
+          currentStep: Object.entries(completedSteps)
+            .filter(([_, completed]) => completed)
+            .length
+        });
         
         window.scrollTo({
           top: offsetPosition,
@@ -1138,11 +1134,10 @@ export default function Home() {
               <Link
                 href="/saved"
                 className="px-4 py-2 rounded-full text-white text-sm font-medium bg-gray-900 hover:bg-gray-800 transition-colors shadow-sm flex items-center gap-2"
-                onClick={() => {
-                  console.log('Dashboard navigation attempt:', {
+                onClick={async () => {
+                  await logEvent('dashboard_navigation', {
                     timestamp: new Date().toISOString(),
                     userEmail: user?.email,
-                    userAgent: window.navigator.userAgent,
                     pathname: window.location.pathname,
                     isPremium: isPremium,
                     dailySwipes: usageCount
