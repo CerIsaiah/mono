@@ -865,6 +865,26 @@ export default function Home() {
     }
   };
 
+  // Add this near the other useEffect hooks
+  useEffect(() => {
+    // Check if this is the first load
+    const isFirstLoad = sessionStorage.getItem('hasLoadedBefore') !== 'true';
+    
+    if (isFirstLoad) {
+      console.log('First page load detected, refreshing page...', {
+        timestamp: new Date().toISOString(),
+        pathname: window.location.pathname,
+        userAgent: window.navigator.userAgent
+      });
+      
+      // Mark that we've loaded before
+      sessionStorage.setItem('hasLoadedBefore', 'true');
+      
+      // Refresh the page
+      window.location.reload();
+    }
+  }, []); // Empty dependency array means this runs once on mount
+
   return (
     <>
       <Script id="global-styles" strategy="beforeInteractive">
