@@ -29,7 +29,6 @@ interface User {
   cancel_at_period_end: any;
   trial_started_at: any;
   stripe_customer_id: any;
-  had_trial: boolean;
 }
 
 interface SubscriptionDetails {
@@ -68,8 +67,7 @@ router.get('/status', async (req: Request, res: Response) => {
         email,
         cancel_at_period_end,
         trial_started_at,
-        stripe_customer_id,
-        is_trial
+        stripe_customer_id
       `);
 
     if (userId) {
@@ -119,6 +117,9 @@ router.get('/status', async (req: Request, res: Response) => {
       status = 'free';
     }
 
+    // Determine if user has had a trial before
+    const hadTrialBefore = Boolean(user.trial_started_at) || (user.is_trial === false && user.trial_end_date);
+
     const response = {
       status,
       details: {
@@ -126,7 +127,7 @@ router.get('/status', async (req: Request, res: Response) => {
         isTrialActive,
         trialEndsAt: user.trial_end_date || null,
         subscriptionEndsAt: user.subscription_end_date || null,
-        hadTrial: Boolean(user.is_trial || user.trial_started_at),
+        hadTrial: hadTrialBefore,
         isCanceled: user.subscription_status === 'canceled',
         canceledDuringTrial: user.subscription_status === 'canceled' && isTrialActive
       }
