@@ -689,19 +689,28 @@ export default function SavedResponses() {
                           {subscriptionDetails?.trialEndsAt ? `${formatTimeRemaining(subscriptionDetails.trialEndsAt)} days remaining in trial` : 'Trial period active'}
                         </p>
                       </>
-                    ) : subscriptionStatus === 'premium' ? (
+                    ) : subscriptionStatus === 'premium' && subscriptionDetails ? (
                       <>
                         <p className="flex items-center gap-2 text-pink-400">
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                           </svg>
-                          {subscriptionDetails?.isCanceled ? 'Premium (Canceling)' : 'Premium Member'}
+                          {subscriptionDetails.isCanceled ? 'Premium (Canceling)' : 'Premium Member'}
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {subscriptionDetails?.isCanceled 
-                            ? `Access until ${new Date(subscriptionDetails.subscriptionEndsAt!).toLocaleDateString()}`
-                            : 'Enjoying unlimited access!'}
-                        </p>
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-400">
+                            {subscriptionDetails.isCanceled 
+                              ? `Access until ${new Date(subscriptionDetails.subscriptionEndsAt!).toLocaleDateString()}`
+                              : <>
+                                  Next payment: ${new Date(subscriptionDetails.subscriptionEndsAt!).toLocaleDateString()} 
+                                  <span className="text-pink-400 ml-1">($4.99/month)</span>
+                                </>
+                            }
+                          </p>
+                          {!subscriptionDetails.isCanceled && (
+                            <p className="text-xs text-gray-500">Your card will be automatically charged</p>
+                          )}
+                        </div>
                       </>
                     ) : subscriptionStatus === 'trial-canceling' ? (
                       <>

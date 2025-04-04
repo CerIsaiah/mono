@@ -98,7 +98,7 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
             currency: 'usd',
             product_data: {
               name: 'SmoothRizz Premium',
-              description: '3-day free trial, then $5/month for unlimited swipes',
+              description: '3-day free trial, then $4.99/month for unlimited swipes',
             },
             unit_amount: 499, // $4.99 in cents
             recurring: {
