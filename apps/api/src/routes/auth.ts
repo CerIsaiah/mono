@@ -141,9 +141,21 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
 
       if (updateError) {
         console.error('Error updating user usage:', updateError);
+        // If we failed to update the user, don't clear the IP usage
+        throw new Error('Failed to update user usage');
       }
       
-      
+      // Then clear IP-based usage - do this only after successful user update
+      const { error: ipError } = await supabase
+        .from('ip_usage')
+        .update({ daily_usage: 0 })
+        .eq('ip_address', requestIP);
+
+      if (ipError) {
+        console.error('Error clearing IP usage:', ipError);
+        // Log error but don't throw - we already updated the user
+      }
+        
       // Update the user object to reflect new usage
       user.daily_usage += anonymousSwipes;
       user.total_usage += anonymousSwipes;
@@ -151,7 +163,9 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
       console.log('Updated user usage:', {
         email,
         newDailyUsage: user.daily_usage,
-        newTotalUsage: user.total_usage
+        newTotalUsage: user.total_usage,
+        clearedIP: requestIP,
+        anonymousSwipesTransferred: anonymousSwipes
       });
     }
     

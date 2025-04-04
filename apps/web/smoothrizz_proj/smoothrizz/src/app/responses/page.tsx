@@ -716,12 +716,16 @@ export default function ResponsesPage() {
       
       // Get current usage from backend for anonymous user
       const usageResponse = await fetch(`${API_BASE_URL}/api/usage`);
+      if (!usageResponse.ok) {
+        throw new Error('Failed to fetch anonymous usage');
+      }
       const usageData = await usageResponse.json();
       const anonymousSwipes = usageData.dailySwipes || 0;
       
       console.log('Migrating anonymous data:', {
         savedResponses: anonymousResponses.length,
-        dailySwipes: anonymousSwipes
+        dailySwipes: anonymousSwipes,
+        timestamp: new Date().toISOString()
       });
       
       // Call the Google auth endpoint with anonymous data
@@ -740,10 +744,22 @@ export default function ResponsesPage() {
       });
       
       if (!authResponse.ok) {
+        const errorData = await authResponse.json().catch(() => ({}));
+        console.error('Auth response error:', {
+          status: authResponse.status,
+          error: errorData.error || authResponse.statusText
+        });
         throw new Error('Failed to authenticate with server');
       }
       
       const authData = await authResponse.json();
+      console.log('Auth success:', {
+        dailySwipes: authData.dailySwipes,
+        totalSwipes: authData.totalSwipes,
+        anonymousSwipes,
+        timestamp: new Date().toISOString()
+      });
+
       const user = {
         email: authData.user.email,
         name: authData.user.name,
