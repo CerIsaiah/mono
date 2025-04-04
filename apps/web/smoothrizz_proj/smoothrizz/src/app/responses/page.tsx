@@ -252,6 +252,19 @@ export default function ResponsesPage() {
       try {
         // First check if we have a user in localStorage
         const storedUser = localStorage.getItem('smoothrizz_user');
+        
+        // Check for current responses in localStorage
+        const currentResponses = localStorage.getItem('current_responses');
+        
+        // If no stored user but we have responses, allow anonymous access
+        if (!storedUser && currentResponses) {
+          console.log('Anonymous user with responses, allowing access');
+          setIsSignedIn(false);
+          setUser(null);
+          return;
+        }
+
+        // If no stored user and no responses, redirect to home
         if (!storedUser) {
           console.log('No stored user found, redirecting to home');
           router.push('/');

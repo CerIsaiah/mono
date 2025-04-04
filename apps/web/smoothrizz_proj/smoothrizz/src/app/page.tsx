@@ -259,32 +259,28 @@ export default function Home() {
             setUser(null);
             setIsSignedIn(false);
           }
-        } else {
-          // No stored user - this is fine, continue as anonymous
-          console.log('No stored user found, continuing as anonymous user');
-          setIsSignedIn(false);
-          setUser(null);
         }
         
-        // Initialize Google Sign-In only if it hasn't been initialized yet
-        if (!window.google?.accounts?.id && !document.querySelector('script[src*="accounts.google.com"]')) {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: handleSignIn,
-          });
-          
-          // Trigger Google One Tap UI
-          window.google.accounts.id.prompt((notification) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-              console.log('Google One Tap not displayed');
-            }
-          });
+        // Only try to fetch client ID if no stored user exists
+        // Look for Google Sign-In feature
+        if (!window.google?.accounts?.id) {
+          console.log('Google Sign-In not available');
+          return;
         }
+        
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleSignIn,
+        });
+        
+        // Trigger Google One Tap UI
+        window.google.accounts.id.prompt((notification) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            console.log('Google One Tap not displayed');
+          }
+        });
       } catch (error) {
         console.error('Auth check error:', error);
-        // Continue as anonymous user on error
-        setIsSignedIn(false);
-        setUser(null);
       }
     };
     
@@ -325,24 +321,18 @@ export default function Home() {
         // Use hardcoded Google client ID
         const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
         
-        // Check if Google Sign-In is already initialized
-        if (!document.querySelector('script[src*="accounts.google.com"]')) {
-          if (window.google?.accounts?.id) {
-            window.google.accounts.id.initialize({
-              client_id: clientId,
-              callback: handleSignIn,
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleSignIn,
+          });
+          
+          if (googleButtonRef.current) {
+            window.google.accounts.id.renderButton(googleButtonRef.current, {
+              theme: "outline",
+              size: "large"
             });
-            
-            if (googleButtonRef.current) {
-              window.google.accounts.id.renderButton(googleButtonRef.current, {
-                theme: "outline",
-                size: "large"
-              });
-            }
           }
-        } else {
-          console.log('Google Sign-In script already loaded, skipping initialization');
-          renderGoogleButton();
         }
       } catch (error) {
         console.error('Error initializing Google Sign-In:', error);
