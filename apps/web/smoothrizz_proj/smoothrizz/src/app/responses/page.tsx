@@ -195,127 +195,59 @@ export default function ResponsesPage() {
     }
   }, [router]);
 
-  // Simplify the auth check effect
+  // Update auth check effect
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Use hardcoded Google client ID directly
-        const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
-
-        // Initialize Google Sign-In and get credential
-        if (!window.google?.accounts?.id) {
-          console.log('Google Sign-In not initialized, redirecting to home');
+        // First check if we have a user in localStorage
+        const storedUser = localStorage.getItem('smoothrizz_user');
+        if (!storedUser) {
+          console.log('No stored user found, redirecting to home');
           router.push('/');
           return;
         }
 
-        // Get the current credential
-        const credential = await new Promise<string>((resolve) => {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: (response) => resolve(response.credential)
-          });
-        });
-
-        if (!credential) {
-          console.log('No Google credential found, redirecting to home');
-          router.push('/');
-          return;
-        }
-
-        // Verify auth status with backend using Google auth endpoint
-        const response = await fetch(`${API_BASE_URL}/auth/google`, {
+        const user = JSON.parse(storedUser);
+        
+        // Verify the session with backend using the correct endpoint
+        const sessionResponse = await fetch(`${API_BASE_URL}/auth/verify`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ credential })
+          body: JSON.stringify({ email: user.email })
         });
 
-        if (!response.ok) {
-          console.log('Auth verification failed, redirecting to home');
+        if (!sessionResponse.ok) {
+          console.log('Session verification failed, redirecting to home');
+          localStorage.removeItem('smoothrizz_user');
           router.push('/');
           return;
         }
 
-        const authData = await response.json();
-        const user = {
-          email: authData.user.email,
-          name: authData.user.name,
-          picture: authData.user.avatar_url
-        };
-
+        const sessionData = await sessionResponse.json();
+        
+        // Update user state with latest data
         setUser(user);
         setIsSignedIn(true);
-        setUsageCount(authData.dailySwipes || 0);
-        setIsPremium(authData.isPremium || authData.isTrial);
+        setUsageCount(sessionData.dailySwipes || 0);
+        setIsPremium(sessionData.isPremium || sessionData.isTrial);
 
-        // Only migrate anonymous responses if needed
-        const anonymousResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
-        if (anonymousResponses.length > 0) {
-          try {
-            await fetch(`${API_BASE_URL}/api/saved-responses`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-user-email': user.email
-              },
-              body: JSON.stringify({
-                userEmail: user.email,
-                responses: anonymousResponses
-              })
-            });
-            
-            localStorage.removeItem('anonymous_saved_responses');
-          } catch (migrateError) {
-            console.error('Error migrating anonymous responses:', migrateError);
-          }
-        }
+        console.log('Auth check completed:', {
+          email: user.email,
+          isPremium: sessionData.isPremium,
+          dailySwipes: sessionData.dailySwipes
+        });
+
       } catch (error) {
         console.error('Auth check error:', error);
+        localStorage.removeItem('smoothrizz_user');
         router.push('/');
       }
     };
     
     checkAuth();
   }, [router]);
-
-  // Separate effect for premium status - only runs after auth is confirmed
-  useEffect(() => {
-    const checkPremiumStatus = async () => {
-      if (!user?.email) return;
-      
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/subscription/status`, {
-          headers: {
-            'x-user-email': user.email
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch subscription status');
-        }
-        
-        const data = await response.json();
-        setIsPremium(data.isPremium);
-        setUsageCount(data.dailySwipes || 0);
-        
-        localStorage.setItem('smoothrizz_usage', JSON.stringify({
-          dailySwipes: data.dailySwipes,
-          isPremium: data.isPremium
-        }));
-      } catch (error) {
-        console.error('Error checking premium status:', error);
-        // Don't redirect on premium check failure, just set safe defaults
-        setIsPremium(false);
-        setUsageCount(0);
-      }
-    };
-
-    if (isSignedIn) {
-      checkPremiumStatus();
-    }
-  }, [user?.email, isSignedIn]);
 
   // Update swiped function to handle local storage and API calls
   const swiped = async (direction: Direction, responseToDelete: string, index: number) => {
