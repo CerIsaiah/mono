@@ -685,6 +685,7 @@ export default function ResponsesPage() {
         document.body.appendChild(script);
       } else if (window.google) {
         // If script already exists but we're not loaded, set loaded state
+        console.log('Google Sign-In script already exists');
         setGoogleLoaded(true);
       }
     };

@@ -4,7 +4,6 @@ import { useState, useEffect, FC, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MIN_LEARNING_PERCENTAGE } from '../shared/constants';
-import { GoogleAccount } from '../types/auth';
 
 // Add API base URL constant
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
@@ -18,7 +17,7 @@ interface SavedResponse {
 interface User {
   id: string;
   email: string;
-  name?: string;
+  name: string;
   picture?: string;
 }
 
@@ -30,26 +29,6 @@ interface SubscriptionDetails {
   hadTrial: boolean;
   isCanceled: boolean;
   canceledDuringTrial: boolean;
-}
-
-// Add Google Auth types
-interface GoogleCredentialResponse {
-  credential: string;
-  select_by: string;
-}
-
-interface GoogleNotification {
-  isNotDisplayed: () => boolean;
-  isSkippedMoment: () => boolean;
-  getNotDisplayedReason: () => string;
-  isDismissedMoment: () => boolean;
-  getMomentType: () => string;
-}
-
-interface GoogleIdConfiguration {
-  client_id: string;
-  callback: (response: GoogleCredentialResponse) => void;
-  auto_select?: boolean;
 }
 
 export default function SavedResponses() {
@@ -95,157 +74,58 @@ export default function SavedResponses() {
   };
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const loadUserData = async () => {
       try {
-        // First check if user data exists in localStorage
-        const savedUser = localStorage.getItem('smoothrizz_user');
-        if (savedUser) {
-          try {
-            const parsedUser = JSON.parse(savedUser);
-            const userData: User = {
-              id: parsedUser.id,
-              email: parsedUser.email,
-              name: parsedUser.name || parsedUser.email?.split('@')[0],
-              picture: parsedUser.avatar_url || parsedUser.picture
-            };
-            
-            setUser(userData);
-            setIsSignedIn(true);
-            console.log('User restored from localStorage:', userData.email);
-            
-            // Fetch saved responses using the cached user
-            await fetchSavedResponses(userData.email);
-            return;
-          } catch (e) {
-            console.error('Failed to parse saved user data:', e);
-            localStorage.removeItem('smoothrizz_user');
-          }
-        }
-
-        // If no saved user, continue with Google auth
-        const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
+        // Get email from URL query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const emailParam = urlParams.get('email');
         
-        // Check if Google Sign-In is available
-        if (!window.google?.accounts?.id) {
-          console.log('Google Sign-In not initialized, redirecting to home');
+        if (!emailParam) {
+          console.log('No email parameter found, redirecting to home');
           router.push('/');
           return;
         }
-
-        console.log('Attempting to get current Google credential...');
         
-        // We need to check if the user is already signed in with Google
-        // Prompting for automatic selection
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: handleGoogleCredential,
-          auto_select: true
-        } as any);
+        // Fetch subscription status which contains user info
+        const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(emailParam)}`);
         
-        // Prompt for one-tap
-        window.google.accounts.id.prompt((notification: any) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            // User is not signed in or the prompt was skipped
-            if (notification.getNotDisplayedReason) {
-              console.log('Google One-Tap prompt not displayed or skipped:', notification.getNotDisplayedReason());
-            } else {
-              console.log('Google One-Tap prompt not displayed or skipped');
-            }
-            router.push('/');
-          }
-        });
-      } catch (error) {
-        console.error('Auth check error:', error);
-        router.push('/');
-      }
-    };
-    
-    // Helper function to handle Google credential
-    const handleGoogleCredential = async (response: any) => {
-      if (response.credential) {
-        try {
-          console.log('Verifying auth with backend...');
-          // Verify auth status with backend using Google auth endpoint
-          const backendResponse = await fetch(`${API_BASE_URL}/auth/google`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ credential: response.credential })
-          });
-
-          if (!backendResponse.ok) {
-            console.log('Auth verification failed, redirecting to home');
-            router.push('/');
-            return;
-          }
-
-          const authData = await backendResponse.json();
-          console.log('Auth verification successful', { 
-            email: authData.user.email,
-            isPremium: authData.isPremium,
-            isTrial: authData.isTrial
-          });
-          
-          const userData: User = {
-            id: authData.user.id,
-            email: authData.user.email,
-            name: authData.user.name || authData.user.email?.split('@')[0],
-            picture: authData.user.avatar_url
-          };
-
-          // Save user to localStorage
-          localStorage.setItem('smoothrizz_user', JSON.stringify(authData.user));
-          
-          setUser(userData);
-          setIsSignedIn(true);
-          setUsageCount(authData.dailySwipes || 0);
-          setIsPremium(authData.isPremium || authData.isTrial);
-          
-          // Fetch saved responses
-          await fetchSavedResponses(userData.email);
-        } catch (error) {
-          console.error('Failed to process Google credential:', error);
+        if (!response.ok) {
+          console.error('Failed to fetch subscription data');
           router.push('/');
+          return;
         }
-      } else {
-        console.error('No credential in Google response');
+        
+        const data = await response.json();
+        console.log('Subscription data:', data);
+        
+        // Set subscription status and details
+        setSubscriptionStatus(data.status);
+        setSubscriptionDetails(data.details);
+        setIsPremium(data.status === 'premium' || data.status === 'trial');
+        
+        // Set basic user data
+        const userData: User = {
+          id: emailParam,
+          email: emailParam,
+          name: emailParam.split('@')[0],
+          picture: undefined
+        };
+        
+        setUser(userData);
+        setIsSignedIn(true);
+        
+        // Fetch saved responses
+        await fetchSavedResponses(emailParam);
+      } catch (error) {
+        console.error('Error loading user data:', error);
         router.push('/');
+      } finally {
+        setIsLoading(false);
       }
     };
     
-    checkAuth();
+    loadUserData();
   }, [router]);
-
-  useEffect(() => {
-    const fetchSubscriptionStatus = async () => {
-      if (user?.email) {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/subscription/status`, {
-            headers: {
-              'x-user-email': user.email
-            }
-          });
-          if (!response.ok) {
-            throw new Error('Failed to fetch subscription status');
-          }
-          const data = await response.json();
-          console.log('Subscription status response:', data);
-          setSubscriptionStatus(data.status);
-          setSubscriptionDetails(data.details);
-          setIsPremium(data.status === 'premium' || data.status === 'trial');
-        } catch (error) {
-          console.error('Error fetching subscription status:', error);
-          // Reset to default state on error
-          setSubscriptionStatus('free');
-          setSubscriptionDetails(null);
-        }
-      }
-      setIsLoading(false);
-    };
-
-    fetchSubscriptionStatus();
-  }, [user]);
 
   useEffect(() => {
     const fetchLearningPercentage = async () => {
@@ -317,33 +197,6 @@ export default function SavedResponses() {
 
   const handleSignOut = async () => {
     try {
-      // Call backend sign-out endpoint
-      const response = await fetch(`${API_BASE_URL}/auth/signout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to sign out');
-      }
-
-      // Clear all local storage
-      localStorage.removeItem('smoothrizz_user');
-      localStorage.removeItem('anonymous_saved_responses');
-      localStorage.removeItem('smoothrizz_usage');
-      sessionStorage.removeItem('anon_limit_triggered');
-
-      // Clear Google sign-in state if available
-      const google = (window as any).google as GoogleAccount | undefined;
-      if (google?.accounts?.id) {
-        google.accounts.id.disableAutoSelect();
-        google.accounts.id.revoke(user?.email || '', () => {
-          console.log('Google sign-in state revoked');
-        });
-      }
-
       // Clear React state
       setUser(null);
       setResponses([]);
@@ -354,17 +207,14 @@ export default function SavedResponses() {
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
-      // Even if there's an error, force sign out on frontend
-      localStorage.removeItem('smoothrizz_user');
-      setUser(null);
       router.push('/');
     }
   };
 
   const handleCheckout = async () => {
     try {
-      if (!user?.id) {
-        console.error('No user ID found');
+      if (!user?.email) {
+        console.error('No user email found');
         return;
       }
 
@@ -439,74 +289,6 @@ export default function SavedResponses() {
     const now = new Date();
     const days = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     return days;
-  };
-
-  const handleCredentialResponse = async (response: any) => {
-    try {
-      // Send the token to your backend for verification
-      const result = await fetch(`${API_BASE_URL}/auth/google`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          credential: response.credential,
-        }),
-      });
-
-      const data = await result.json();
-
-      if (result.ok) {
-        // Store user data in localStorage
-        localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
-        
-        const userData: User = {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.name || data.user.email?.split('@')[0],
-          picture: data.user.avatar_url || data.user.picture
-        };
-        
-        // Update user state
-        setUser(userData);
-        setIsSignedIn(true);
-        setUsageCount(data.dailySwipes || 0);
-        setIsPremium(data.isPremium || data.isTrial);
-        
-        // Update subscription status to avoid showing the anonymous user state
-        if (data.isPremium || data.isTrial) {
-          setSubscriptionStatus(data.isTrial ? 'trial' : 'premium');
-        }
-        
-        // Fetch saved responses
-        fetchSavedResponses(userData.email);
-      } else {
-        throw new Error(data.error || 'Failed to sign in');
-      }
-    } catch (error) {
-      console.error('Error during sign-in:', error);
-      alert('Failed to sign in. Please try again.');
-    }
-  };
-
-  const initializeGoogleSignIn = () => {
-    const googleAccountsId = (window as any).google?.accounts?.id;
-    const signInButtonContainer = document.getElementById('googleSignInButtonContainer');
-
-    if (signInButtonContainer && googleAccountsId) {
-      googleAccountsId.initialize({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
-        callback: handleCredentialResponse,
-        auto_select: false
-      });
-
-      if (signInButtonContainer) {
-        googleAccountsId.renderButton(
-          signInButtonContainer,
-          { theme: 'outline', size: 'large' }
-        );
-      }
-    }
   };
 
   interface ConfirmCancelModalProps {
