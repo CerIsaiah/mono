@@ -253,15 +253,21 @@ export default function ResponsesPage() {
         // First check if we have a user in localStorage
         const storedUser = localStorage.getItem('smoothrizz_user');
         
-        // If no stored user, treat as anonymous
+        // If no stored user, treat as anonymous and get IP-based usage
         if (!storedUser) {
           console.log('No stored user, proceeding as anonymous');
           setUser(null);
           setIsSignedIn(false);
           
-          // Get anonymous usage from localStorage
-          const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
-          setUsageCount(savedUsage.dailySwipes || 0);
+          // Get IP-based usage from backend
+          const response = await fetch(`${API_BASE_URL}/api/usage`);
+          if (response.ok) {
+            const data = await response.json();
+            setUsageCount(data.dailySwipes || 0);
+          } else {
+            console.error('Failed to fetch anonymous usage');
+            setUsageCount(0);
+          }
           setIsPremium(false);
           return;
         }
@@ -326,28 +332,7 @@ export default function ResponsesPage() {
     if (direction !== 'left' && direction !== 'right') return;
     
     try {
-      // For anonymous users, track usage locally first
-      if (!isSignedIn) {
-        const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
-        const currentSwipes = savedUsage.dailySwipes || 0;
-        
-        // Check anonymous limit
-        if (currentSwipes >= ANONYMOUS_USAGE_LIMIT) {
-          setShowSignInOverlay(true);
-          sessionStorage.setItem('anon_limit_triggered', 'true');
-          return;
-        }
-        
-        // Update local usage count
-        const newUsage = {
-          dailySwipes: currentSwipes + 1,
-          lastUpdated: new Date().toISOString()
-        };
-        localStorage.setItem('smoothrizz_usage', JSON.stringify(newUsage));
-        setUsageCount(newUsage.dailySwipes);
-      }
-      
-      // Track swipe with backend
+      // Track swipe with backend for both anonymous and signed-in users
       const headers = {
         'Content-Type': 'application/json',
         ...(user?.email && { 'x-user-email': user.email })
@@ -361,19 +346,22 @@ export default function ResponsesPage() {
 
       const data = await response.json();
       
-      // For signed in users, handle usage limits from server response
-      if (isSignedIn) {
-        if (!data.canSwipe) {
-          if (data.requiresUpgrade) {
-            setShowUpgradePopup(true);
-            return;
-          }
-          // If we can't swipe for any other reason, return early
+      // Handle usage limits from server response
+      if (!data.canSwipe) {
+        if (!isSignedIn) {
+          setShowSignInOverlay(true);
+          sessionStorage.setItem('anon_limit_triggered', 'true');
+          return;
+        } else if (data.requiresUpgrade) {
+          setShowUpgradePopup(true);
           return;
         }
-        // Update usage count from response
-        setUsageCount(data.dailySwipes || 0);
+        // If we can't swipe for any other reason, return early
+        return;
       }
+
+      // Update usage count from response for both anonymous and signed-in users
+      setUsageCount(data.dailySwipes || 0);
 
       // Save response to localStorage if right swipe
       if (direction === 'right') {
