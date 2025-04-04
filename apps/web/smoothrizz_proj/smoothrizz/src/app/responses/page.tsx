@@ -199,23 +199,8 @@ export default function ResponsesPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Get the client ID - Use hardcoded ID if endpoint fails
-        let clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
-        
-        try {
-          // First get the client ID
-          const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-          if (clientIdResponse.ok) {
-            const data = await clientIdResponse.json();
-            if (data.clientId) {
-              clientId = data.clientId;
-            }
-          } else {
-            console.log('Using fallback client ID');
-          }
-        } catch (error) {
-          console.log('Error fetching client ID, using fallback');
-        }
+        // Use hardcoded Google client ID directly
+        const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
 
         // Initialize Google Sign-In and get credential
         if (!window.google?.accounts?.id) {
@@ -687,21 +672,7 @@ export default function ResponsesPage() {
           
           try {
             console.log('Initializing Google Sign-In...');
-            let clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
-            
-            try {
-              const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-              if (res.ok) {
-                const data = await res.json();
-                if (data.clientId) {
-                  clientId = data.clientId;
-                }
-              } else {
-                console.log('Using fallback client ID');
-              }
-            } catch (error) {
-              console.log('Error fetching client ID, using fallback');
-            }
+            const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
 
             window.google.accounts.id.initialize({
               client_id: clientId,

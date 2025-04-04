@@ -228,15 +228,18 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('Checking authentication status...');
+        // Use hardcoded Google client ID directly
+        const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
         
-        // First check if we have stored user data
-        const storedUser = localStorage.getItem('smoothrizz_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          console.log('Found stored user data:', { email: userData.email });
+        // Check if user object exists in localStorage
+        const savedUserData = localStorage.getItem('smoothrizz_user');
+        if (savedUserData) {
+          const userData = JSON.parse(savedUserData);
+          console.log('Found saved user:', userData.email);
+          setUser(userData);
+          setIsSignedIn(true);
           
-          // Verify the stored session with backend
+          // Verify saved session with backend
           const verifyResponse = await fetch(`${API_BASE_URL}/auth/verify`, {
             method: 'POST',
             headers: {
@@ -244,97 +247,40 @@ export default function Home() {
             },
             body: JSON.stringify({ email: userData.email })
           });
-
+          
           if (verifyResponse.ok) {
-            const authData = await verifyResponse.json();
-            console.log('Session verification successful:', { 
-              email: authData.user.email,
-              isPremium: authData.isPremium,
-              isTrial: authData.isTrial
-            });
-            
-            setUser(authData.user);
-            setIsSignedIn(true);
-            setUsageCount(authData.dailySwipes || 0);
-            setIsPremium(authData.isPremium || authData.isTrial);
-
-            // Check subscription status
-            const statusResponse = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(authData.user.email)}`);
-            if (statusResponse.ok) {
-              const statusData = await statusResponse.json();
-              console.log('Subscription status:', statusData);
-              setIsPremium(statusData.status === 'premium' || statusData.status === 'trial');
-            }
-            
-            return; // Exit if session is valid
+            const data = await verifyResponse.json();
+            setUsageCount(data.dailySwipes || 0);
+            setIsPremium(data.isPremium || false);
+            return; // Exit if session verification succeeded
           } else {
-            console.log('Stored session invalid, clearing local storage');
+            console.log('Session expired, clearing local storage');
             localStorage.removeItem('smoothrizz_user');
+            setUser(null);
+            setIsSignedIn(false);
           }
         }
-
-        // If no stored session or invalid, proceed with Google Sign-In
-        const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-        if (!clientIdResponse.ok) {
-          console.log('Failed to get Google client ID');
-          setIsSignedIn(false);
-          setUser(null);
+        
+        // Only try to fetch client ID if no stored user exists
+        // Look for Google Sign-In feature
+        if (!window.google?.accounts?.id) {
+          console.log('Google Sign-In not available');
           return;
         }
         
-        const { clientId } = await clientIdResponse.json();
-        if (!clientId || !window.google?.accounts?.id) {
-          console.log('Google Sign-In not available');
-          setIsSignedIn(false);
-          setUser(null);
-          return;
-        }
-
-        // Initialize Google Sign-In but don't force prompt
         window.google.accounts.id.initialize({
           client_id: clientId,
-          callback: async (response) => {
-            if (response.credential) {
-              // Handle successful sign-in
-              const authResponse = await fetch(`${API_BASE_URL}/auth/google`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ credential: response.credential })
-              });
-
-              if (authResponse.ok) {
-                const authData = await authResponse.json();
-                console.log('Google auth successful:', { 
-                  email: authData.user.email,
-                  isPremium: authData.isPremium,
-                  isTrial: authData.isTrial
-                });
-                
-                localStorage.setItem('smoothrizz_user', JSON.stringify(authData.user));
-                setUser(authData.user);
-                setIsSignedIn(true);
-                setUsageCount(authData.dailySwipes || 0);
-                setIsPremium(authData.isPremium || authData.isTrial);
-              }
-            }
+          callback: handleSignIn,
+        });
+        
+        // Trigger Google One Tap UI
+        window.google.accounts.id.prompt((notification) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            console.log('Google One Tap not displayed');
           }
         });
-
-        // Render the sign-in button but don't force prompt
-        if (googleButtonRef.current) {
-          window.google.accounts.id.renderButton(googleButtonRef.current, {
-            theme: "outline",
-            size: "large"
-          });
-        }
-
       } catch (error) {
         console.error('Auth check error:', error);
-        setIsSignedIn(false);
-        setUser(null);
-        setIsPremium(false);
       }
     };
     
@@ -371,36 +317,25 @@ export default function Home() {
 
     // Initialize Google Sign-In
     const initializeGoogleSignIn = async () => {
-      if (!document.getElementById("google-client-script")) {
-        const script = document.createElement("script");
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.id = "google-client-script";
-        script.onload = async () => {
-          try {
-            console.log('Initializing Google Sign-In...');
-            const res = await logConnection('/auth/google-client-id');
-            const { clientId } = await res.json();
-            
-            if (!clientId) {
-              throw new Error('No client ID received from server');
-            }
-
-            window.google.accounts.id.initialize({
-              client_id: clientId,
-              callback: handleSignIn,
+      try {
+        // Use hardcoded Google client ID
+        const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
+        
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleSignIn,
+          });
+          
+          if (googleButtonRef.current) {
+            window.google.accounts.id.renderButton(googleButtonRef.current, {
+              theme: "outline",
+              size: "large"
             });
-            
-            renderGoogleButton();
-            setGoogleLoaded(true);
-            
-          } catch (err) {
-            console.error("Error initializing Google Sign-In:", err);
           }
-        };
-        document.body.appendChild(script);
-      } else {
-        renderGoogleButton();
+        }
+      } catch (error) {
+        console.error('Error initializing Google Sign-In:', error);
       }
     };
 
