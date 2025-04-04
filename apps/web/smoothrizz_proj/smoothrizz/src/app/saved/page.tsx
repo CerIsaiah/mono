@@ -5,13 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MIN_LEARNING_PERCENTAGE } from '../shared/constants';
 import { GoogleAccount } from '../types/auth';
-import { 
-  SubscriptionDetails, 
-  SubscriptionResponse, 
-  SubscriptionStatusType,
-  isPremiumStatus,
-  checkSubscriptionStatus
-} from '../shared/types/subscription';
 
 // Add API base URL constant
 const API_BASE_URL = process.env.NEXT_PUBLIC_RAILWAY_URL || 'https://mono-production-8ef9.up.railway.app';
@@ -29,6 +22,16 @@ interface User {
   picture?: string;
 }
 
+interface SubscriptionDetails {
+  type: string | null;
+  isTrialActive: boolean;
+  trialEndsAt: string | null;
+  subscriptionEndsAt: string | null;
+  hadTrial: boolean;
+  isCanceled: boolean;
+  canceledDuringTrial: boolean;
+}
+
 export default function SavedResponses() {
   const [activeTab, setActiveTab] = useState<'saved' | 'profile'>('saved');
   const [responses, setResponses] = useState<SavedResponse[]>([]);
@@ -44,7 +47,7 @@ export default function SavedResponses() {
   const [copySuccess, setCopySuccess] = useState(false);
   const [matchPercentage, setMatchPercentage] = useState(MIN_LEARNING_PERCENTAGE);
   const router = useRouter();
-  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusType>('free');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'free' | 'trial' | 'premium' | 'trial-canceling' | 'canceling'>('free');
   const [isSignedIn, setIsSignedIn] = useState<boolean>(false);
   const [usageCount, setUsageCount] = useState<number>(0);
   const [isPremium, setIsPremium] = useState<boolean>(false);
@@ -52,22 +55,24 @@ export default function SavedResponses() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Get the client ID
-        console.log('Fetching Google client ID...');
-        const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-        if (!clientIdResponse.ok) {
-          console.log('Failed to get Google client ID, redirecting to home');
-          router.push('/');
-          return;
+        // Get the client ID - Use hardcoded ID if endpoint fails
+        console.log('Getting Google client ID...');
+        let clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
+        
+        try {
+          const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+          if (clientIdResponse.ok) {
+            const data = await clientIdResponse.json();
+            if (data.clientId) {
+              clientId = data.clientId;
+            }
+          } else {
+            console.log('Using fallback client ID');
+          }
+        } catch (error) {
+          console.log('Error fetching client ID, using fallback');
         }
         
-        const { clientId } = await clientIdResponse.json();
-        if (!clientId) {
-          console.log('No client ID received, redirecting to home');
-          router.push('/');
-          return;
-        }
-
         // Initialize Google Sign-In
         if (!window.google?.accounts?.id) {
           console.log('Google Sign-In not initialized, redirecting to home');
@@ -154,38 +159,20 @@ export default function SavedResponses() {
     const fetchSubscriptionStatus = async () => {
       if (user?.email) {
         try {
-          const data = await checkSubscriptionStatus(user.email, API_BASE_URL);
+          const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(user.email)}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch subscription status');
+          }
+          const data = await response.json();
           console.log('Subscription status response:', data);
-          
-          // Update subscription states based on response
           setSubscriptionStatus(data.status);
           setSubscriptionDetails(data.details);
-          setIsPremium(isPremiumStatus(data.status));
-          setUsageCount(data.usage?.daily || 0);
-          
-          // Log the state update for debugging
-          console.log('Updated subscription state:', {
-            status: data.status,
-            details: data.details,
-            isPremium: isPremiumStatus(data.status),
-            usage: data.usage,
-            debug: data.debug
-          });
+          setIsPremium(data.status === 'premium' || data.status === 'trial');
         } catch (error) {
           console.error('Error fetching subscription status:', error);
-          // On error, maintain current state but mark as free
+          // Reset to default state on error
           setSubscriptionStatus('free');
-          setSubscriptionDetails({
-            type: 'standard',
-            isTrialActive: false,
-            trialEndsAt: null,
-            subscriptionEndsAt: null,
-            hadTrial: false,
-            isCanceled: false,
-            canceledDuringTrial: false
-          });
-          setIsPremium(false);
-          setUsageCount(0);
+          setSubscriptionDetails(null);
         }
       }
       setIsLoading(false);

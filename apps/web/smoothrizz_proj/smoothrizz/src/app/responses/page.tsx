@@ -199,15 +199,22 @@ export default function ResponsesPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // First get the client ID
-        const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-        if (!clientIdResponse.ok) {
-          throw new Error('Failed to get Google client ID');
-        }
+        // Get the client ID - Use hardcoded ID if endpoint fails
+        let clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
         
-        const { clientId } = await clientIdResponse.json();
-        if (!clientId) {
-          throw new Error('No client ID received');
+        try {
+          // First get the client ID
+          const clientIdResponse = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+          if (clientIdResponse.ok) {
+            const data = await clientIdResponse.json();
+            if (data.clientId) {
+              clientId = data.clientId;
+            }
+          } else {
+            console.log('Using fallback client ID');
+          }
+        } catch (error) {
+          console.log('Error fetching client ID, using fallback');
         }
 
         // Initialize Google Sign-In and get credential
@@ -294,7 +301,7 @@ export default function ResponsesPage() {
       if (!user?.email) return;
       
       try {
-        const response = await fetch(`${API_BASE_URL}/api/subscription-status`, {
+        const response = await fetch(`${API_BASE_URL}/api/subscription/status`, {
           headers: {
             'x-user-email': user.email
           }
@@ -680,11 +687,20 @@ export default function ResponsesPage() {
           
           try {
             console.log('Initializing Google Sign-In...');
-            const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
-            const { clientId } = await res.json();
+            let clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
             
-            if (!clientId) {
-              throw new Error('No client ID received from server');
+            try {
+              const res = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data.clientId) {
+                  clientId = data.clientId;
+                }
+              } else {
+                console.log('Using fallback client ID');
+              }
+            } catch (error) {
+              console.log('Error fetching client ID, using fallback');
             }
 
             window.google.accounts.id.initialize({
