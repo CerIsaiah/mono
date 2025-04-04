@@ -121,7 +121,7 @@ router.post('/openai', async (req, res) => {
 
     let userMessage: any[] = [{
       type: 'text',
-      text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas: ${firstMoveIdeas}` : ''}`,
+      text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them): ${firstMoveIdeas}` : ''}`,
     }];
 
     if (imageBase64) {
@@ -133,7 +133,7 @@ router.post('/openai', async (req, res) => {
       userMessage = [
         {
           type: 'text',
-          text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas: ${firstMoveIdeas}` : ''}`,
+          text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
         },
         {
           type: 'image_url',
@@ -146,7 +146,7 @@ router.post('/openai', async (req, res) => {
       userMessage = [
         {
           type: 'text',
-          text: `Context of conversation: ${context}\n\nLast message from them: ${lastText}\n\nWhat should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas: ${firstMoveIdeas}` : ''}`,
+          text: `Context of conversation: ${context}\n\nLast message from them: ${lastText}\n\nWhat should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
         },
       ];
     }
