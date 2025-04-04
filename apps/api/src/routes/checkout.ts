@@ -87,7 +87,7 @@ router.post('/', async (req: Request<{}, {}, CheckoutRequestBody>, res: Response
     logger.info('Found user', { userId: user.id, email: user.email });
 
     // Ensure URLs have https:// prefix
-    const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || 'mono-production-8ef9.up.railway.app';
+    const baseUrl = 'https://smoothrizz.com';
     const formattedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
     
     // Create Stripe checkout session
