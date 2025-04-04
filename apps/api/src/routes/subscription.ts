@@ -69,7 +69,7 @@ router.get('/status', async (req: Request, res: Response) => {
         cancel_at_period_end,
         trial_started_at,
         stripe_customer_id,
-        had_trial
+        is_trial
       `);
 
     if (userId) {
