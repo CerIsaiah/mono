@@ -1522,30 +1522,74 @@ export default function Home() {
                     </span>
                   </div>
                   <div className="relative mt-6">
-                    {/* Emoji above slider dot */}
-                    <div 
-                      className="absolute -top-8 transition-all duration-300 text-2xl"
-                      style={{ 
-                        left: `calc(${spicyLevel}% - 12px)`,
-                        transform: 'translateX(-50%)',
-                      }}
-                    >
-                      {spicyLevel <= 33 ? '😊' : spicyLevel <= 66 ? '😏' : '🌶️'}
+                    <div className="relative">
+                      <style jsx>{`
+                        input[type="range"] {
+                          -webkit-appearance: none;
+                          appearance: none;
+                          width: 100%;
+                          height: 8px;
+                          background: linear-gradient(to right, #86efac, #fdba74, #fca5a5);
+                          border-radius: 8px;
+                          outline: none;
+                        }
+
+                        input[type="range"]::-webkit-slider-thumb {
+                          -webkit-appearance: none;
+                          appearance: none;
+                          width: 24px;
+                          height: 24px;
+                          background: white;
+                          border: 2px solid #e5e7eb;
+                          border-radius: 50%;
+                          cursor: pointer;
+                          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                          position: relative;
+                        }
+
+                        input[type="range"]::-webkit-slider-thumb::before {
+                          content: attr(data-emoji);
+                          position: absolute;
+                          top: -24px;
+                          left: 50%;
+                          transform: translateX(-50%);
+                        }
+
+                        input[type="range"]::-moz-range-thumb {
+                          width: 24px;
+                          height: 24px;
+                          background: white;
+                          border: 2px solid #e5e7eb;
+                          border-radius: 50%;
+                          cursor: pointer;
+                          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                        }
+
+                        .emoji-thumb {
+                          pointer-events: none;
+                          position: absolute;
+                          top: -28px;
+                          transform: translateX(-50%);
+                          transition: left 0.1s ease-out;
+                        }
+                      `}</style>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={spicyLevel}
+                        onChange={(e) => setSpicyLevel(parseInt(e.target.value))}
+                        className="w-full appearance-none cursor-pointer"
+                      />
+                      <div 
+                        className="emoji-thumb text-2xl"
+                        style={{ 
+                          left: `${spicyLevel}%`,
+                        }}
+                      >
+                        {spicyLevel <= 33 ? '😊' : spicyLevel <= 66 ? '😏' : '🌶️'}
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={spicyLevel}
-                      onChange={(e) => setSpicyLevel(parseInt(e.target.value))}
-                      className="w-full h-2 bg-gradient-to-r from-green-200 via-orange-200 to-red-200 rounded-lg appearance-none cursor-pointer"
-                      style={{
-                        background: `linear-gradient(to right, 
-                          #86efac ${spicyLevel <= 33 ? '100%' : '0%'}, 
-                          #fdba74 ${spicyLevel > 33 && spicyLevel <= 66 ? '100%' : '0%'}, 
-                          #fca5a5 ${spicyLevel > 66 ? '100%' : '0%'})`
-                      }}
-                    />
                     <div className="absolute -bottom-6 left-0 right-0 flex justify-between text-xs">
                       <span className="text-green-600">Just Friends</span>
                       <span className="text-orange-500">Lil Smooth</span>
