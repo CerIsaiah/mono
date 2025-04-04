@@ -613,7 +613,9 @@ export default function SavedResponses() {
                     </div>
                     
                     <div className="flex justify-between items-start mb-2 pr-16">
-                      <h4 className="text-xl font-bold">{item.response.split(' ').slice(0, 5).join(' ')}...</h4>
+                      <h4 className="text-xl font-bold">
+                        {item.response ? `${item.response.split(' ').slice(0, 5).join(' ')}...` : 'No response'}
+                      </h4>
                     </div>
                     
                     <div className="flex justify-between items-center">
