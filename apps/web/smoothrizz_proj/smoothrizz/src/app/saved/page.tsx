@@ -96,50 +96,38 @@ export default function SavedResponses() {
           return;
         }
 
-        // Verify the session
-        const verifyResponse = await fetch(`${API_BASE_URL}/api/auth/verify`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email: userEmail })
-        });
+        console.log('Checking subscription status for', userEmail);
         
-        if (!verifyResponse.ok) {
-          console.error('Failed to verify session');
+        // Fetch subscription status which contains user info
+        const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(userEmail)}`);
+        
+        if (!response.ok) {
+          console.error('Failed to fetch subscription data');
           router.push('/');
           return;
         }
         
-        const verifyData = await verifyResponse.json();
-        console.log('Session verified:', verifyData);
+        const data = await response.json();
+        console.log('Subscription data:', data);
         
         // Set subscription status and details
-        setSubscriptionStatus(verifyData.isPremium ? (verifyData.isTrial ? 'trial' : 'premium') : 'free');
-        setSubscriptionDetails({
-          type: verifyData.isPremium ? 'premium' : null,
-          isTrialActive: verifyData.isTrial,
-          trialEndsAt: verifyData.trialEndsAt || null,
-          subscriptionEndsAt: null,
-          hadTrial: false,
-          isCanceled: false,
-          canceledDuringTrial: false
-        });
-        setIsPremium(verifyData.isPremium);
+        setSubscriptionStatus(data.status);
+        setSubscriptionDetails(data.details);
+        setIsPremium(data.status === 'premium' || data.status === 'trial');
         
-        // Set basic user data from verify response
+        // Set basic user data
         const userData: User = {
-          id: verifyData.user.id,
-          email: verifyData.user.email,
-          name: verifyData.user.name || verifyData.user.email.split('@')[0],
-          picture: verifyData.user.avatar_url
+          id: userEmail,
+          email: userEmail,
+          name: userEmail.split('@')[0],
+          picture: undefined
         };
         
         setUser(userData);
         setIsSignedIn(true);
         
         // Fetch saved responses
-        await fetchSavedResponses(verifyData.user.email);
+        await fetchSavedResponses(userEmail);
       } catch (error) {
         console.error('Error loading user data:', error);
         router.push('/');
