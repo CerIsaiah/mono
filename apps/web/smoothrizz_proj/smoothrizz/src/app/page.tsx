@@ -484,8 +484,20 @@ export default function Home() {
         mode: mode
       });
 
-      // Store the responses in localStorage before navigation
-      localStorage.setItem('current_responses', JSON.stringify(data));
+      // Create a complete data object with all necessary fields
+      const completeData = {
+        responses: data.responses,
+        currentIndex: data.responses.length - 1,
+        mode: mode,
+        lastFile: selectedFile ? await convertFileToBase64(selectedFile) : null,
+        lastContext: context || '',
+        lastText: lastText || '',
+        inputMode: showTextInput ? 'text' : 'screenshot',
+        timestamp: Date.now()
+      };
+
+      // Store the complete data in localStorage before navigation
+      localStorage.setItem('current_responses', JSON.stringify(completeData));
       
       // Use router.push for client-side navigation
       router.push('/responses');
