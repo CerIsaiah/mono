@@ -32,6 +32,26 @@ interface SubscriptionDetails {
   canceledDuringTrial: boolean;
 }
 
+// Add Google Auth types
+interface GoogleCredentialResponse {
+  credential: string;
+  select_by: string;
+}
+
+interface GoogleNotification {
+  isNotDisplayed: () => boolean;
+  isSkippedMoment: () => boolean;
+  getNotDisplayedReason: () => string;
+  isDismissedMoment: () => boolean;
+  getMomentType: () => string;
+}
+
+interface GoogleIdConfiguration {
+  client_id: string;
+  callback: (response: GoogleCredentialResponse) => void;
+  auto_select?: boolean;
+}
+
 export default function SavedResponses() {
   const [activeTab, setActiveTab] = useState<'saved' | 'profile'>('saved');
   const [responses, setResponses] = useState<SavedResponse[]>([]);
@@ -52,87 +72,144 @@ export default function SavedResponses() {
   const [usageCount, setUsageCount] = useState<number>(0);
   const [isPremium, setIsPremium] = useState<boolean>(false);
 
+  // Helper function to fetch saved responses (moved outside useEffect)
+  const fetchSavedResponses = async (email: string) => {
+    console.log('Fetching saved responses...');
+    try {
+      const savedResponse = await fetch(`${API_BASE_URL}/api/saved-responses`, {
+        headers: {
+          'x-user-email': email
+        }
+      });
+      
+      if (savedResponse.ok) {
+        const savedData = await savedResponse.json();
+        setResponses(savedData.responses || []);
+        console.log(`Loaded ${savedData.responses?.length || 0} saved responses`);
+      } else {
+        console.error('Failed to fetch saved responses', savedResponse.status);
+      }
+    } catch (error) {
+      console.error('Failed to fetch saved responses:', error);
+    }
+  };
+
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Use hardcoded Google client ID directly
+        // First check if user data exists in localStorage
+        const savedUser = localStorage.getItem('smoothrizz_user');
+        if (savedUser) {
+          try {
+            const parsedUser = JSON.parse(savedUser);
+            const userData: User = {
+              id: parsedUser.id,
+              email: parsedUser.email,
+              name: parsedUser.name || parsedUser.email?.split('@')[0],
+              picture: parsedUser.avatar_url || parsedUser.picture
+            };
+            
+            setUser(userData);
+            setIsSignedIn(true);
+            console.log('User restored from localStorage:', userData.email);
+            
+            // Fetch saved responses using the cached user
+            await fetchSavedResponses(userData.email);
+            return;
+          } catch (e) {
+            console.error('Failed to parse saved user data:', e);
+            localStorage.removeItem('smoothrizz_user');
+          }
+        }
+
+        // If no saved user, continue with Google auth
         const clientId = "776336590279-s1ucslerlcfcictp8kbhn6jq45s2v2fr.apps.googleusercontent.com";
         
-        // Initialize Google Sign-In
+        // Check if Google Sign-In is available
         if (!window.google?.accounts?.id) {
           console.log('Google Sign-In not initialized, redirecting to home');
           router.push('/');
           return;
         }
 
-        console.log('Authenticating with Google...');
-        // Get the current credential
-        const credential = await new Promise<string>((resolve, reject) => {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: (response) => {
-              if (response.credential) {
-                resolve(response.credential);
-              } else {
-                reject(new Error('No credential received'));
-              }
+        console.log('Attempting to get current Google credential...');
+        
+        // We need to check if the user is already signed in with Google
+        // Prompting for automatic selection
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleGoogleCredential,
+          auto_select: true
+        } as any);
+        
+        // Prompt for one-tap
+        window.google.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            // User is not signed in or the prompt was skipped
+            if (notification.getNotDisplayedReason) {
+              console.log('Google One-Tap prompt not displayed or skipped:', notification.getNotDisplayedReason());
+            } else {
+              console.log('Google One-Tap prompt not displayed or skipped');
             }
-          });
-        });
-
-        console.log('Verifying auth with backend...');
-        // Verify auth status with backend using Google auth endpoint
-        const response = await fetch(`${API_BASE_URL}/auth/google`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ credential })
-        });
-
-        if (!response.ok) {
-          console.log('Auth verification failed, redirecting to home');
-          router.push('/');
-          return;
-        }
-
-        const authData = await response.json();
-        console.log('Auth verification successful', { 
-          email: authData.user.email,
-          isPremium: authData.isPremium,
-          isTrial: authData.isTrial
-        });
-        
-        const userData: User = {
-          id: authData.user.id,
-          email: authData.user.email,
-          name: authData.user.name,
-          picture: authData.user.avatar_url
-        };
-
-        setUser(userData);
-        setIsSignedIn(true);
-        setUsageCount(authData.dailySwipes || 0);
-        setIsPremium(authData.isPremium || authData.isTrial);
-        
-        // Fetch saved responses for the user
-        console.log('Fetching saved responses...');
-        const savedResponse = await fetch(`${API_BASE_URL}/api/saved-responses`, {
-          headers: {
-            'x-user-email': userData.email
+            router.push('/');
           }
         });
-        
-        if (savedResponse.ok) {
-          const savedData = await savedResponse.json();
-          setResponses(savedData.responses || []);
-          console.log(`Loaded ${savedData.responses?.length || 0} saved responses`);
-        } else {
-          console.error('Failed to fetch saved responses', savedResponse.status);
-        }
-
       } catch (error) {
         console.error('Auth check error:', error);
+        router.push('/');
+      }
+    };
+    
+    // Helper function to handle Google credential
+    const handleGoogleCredential = async (response: any) => {
+      if (response.credential) {
+        try {
+          console.log('Verifying auth with backend...');
+          // Verify auth status with backend using Google auth endpoint
+          const backendResponse = await fetch(`${API_BASE_URL}/auth/google`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ credential: response.credential })
+          });
+
+          if (!backendResponse.ok) {
+            console.log('Auth verification failed, redirecting to home');
+            router.push('/');
+            return;
+          }
+
+          const authData = await backendResponse.json();
+          console.log('Auth verification successful', { 
+            email: authData.user.email,
+            isPremium: authData.isPremium,
+            isTrial: authData.isTrial
+          });
+          
+          const userData: User = {
+            id: authData.user.id,
+            email: authData.user.email,
+            name: authData.user.name || authData.user.email?.split('@')[0],
+            picture: authData.user.avatar_url
+          };
+
+          // Save user to localStorage
+          localStorage.setItem('smoothrizz_user', JSON.stringify(authData.user));
+          
+          setUser(userData);
+          setIsSignedIn(true);
+          setUsageCount(authData.dailySwipes || 0);
+          setIsPremium(authData.isPremium || authData.isTrial);
+          
+          // Fetch saved responses
+          await fetchSavedResponses(userData.email);
+        } catch (error) {
+          console.error('Failed to process Google credential:', error);
+          router.push('/');
+        }
+      } else {
+        console.error('No credential in Google response');
         router.push('/');
       }
     };
@@ -383,11 +460,26 @@ export default function SavedResponses() {
         // Store user data in localStorage
         localStorage.setItem('smoothrizz_user', JSON.stringify(data.user));
         
-        // Update user state
-        setUser(data.user);
+        const userData: User = {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name || data.user.email?.split('@')[0],
+          picture: data.user.avatar_url || data.user.picture
+        };
         
-        // Redirect to the saved page dashboard
-        router.push('/saved');
+        // Update user state
+        setUser(userData);
+        setIsSignedIn(true);
+        setUsageCount(data.dailySwipes || 0);
+        setIsPremium(data.isPremium || data.isTrial);
+        
+        // Update subscription status to avoid showing the anonymous user state
+        if (data.isPremium || data.isTrial) {
+          setSubscriptionStatus(data.isTrial ? 'trial' : 'premium');
+        }
+        
+        // Fetch saved responses
+        fetchSavedResponses(userData.email);
       } else {
         throw new Error(data.error || 'Failed to sign in');
       }
@@ -704,13 +796,21 @@ export default function SavedResponses() {
           <div className="bg-[#191e2e] rounded-2xl border border-gray-700 overflow-hidden max-w-2xl mx-auto">
             <div className="bg-gradient-to-r from-pink-600 to-purple-600 px-6 py-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-black/20 flex items-center justify-center backdrop-blur-sm">
-                  <svg className="w-8 h-8 text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
+                <div className="w-16 h-16 rounded-full bg-black/20 flex items-center justify-center backdrop-blur-sm overflow-hidden">
+                  {user?.picture ? (
+                    <img 
+                      src={user.picture} 
+                      alt={user.name || 'User'} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <svg className="w-8 h-8 text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold">{user?.name || 'Anonymous User'}</h2>
+                  <h2 className="text-xl font-bold">{user?.name || user?.email?.split('@')[0] || 'Anonymous User'}</h2>
                   <p className="text-pink-200 text-sm">{user?.email || 'Not signed in'}</p>
                 </div>
               </div>
