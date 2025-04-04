@@ -126,7 +126,7 @@ router.get('/status', async (req: Request, res: Response) => {
         isTrialActive,
         trialEndsAt: user.trial_end_date || null,
         subscriptionEndsAt: user.subscription_end_date || null,
-        hadTrial: Boolean(user.had_trial),
+        hadTrial: Boolean(user.is_trial || user.trial_started_at),
         isCanceled: user.subscription_status === 'canceled',
         canceledDuringTrial: user.subscription_status === 'canceled' && isTrialActive
       }
