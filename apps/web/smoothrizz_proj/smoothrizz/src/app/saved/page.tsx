@@ -79,7 +79,7 @@ export default function SavedResponses() {
         // Get the saved user email from localStorage
         const savedUser = localStorage.getItem('smoothrizz_user');
         
-        const clearAndRedirect = () => {
+        const clearAndRedirect = async () => {
           // Clear all user-related state
           setUser(null);
           setIsSignedIn(false);
@@ -92,6 +92,11 @@ export default function SavedResponses() {
           localStorage.removeItem('smoothrizz_user');
           localStorage.removeItem('current_responses');
           
+          // Sign out from Google if the API is available
+          if (window.google?.accounts?.id) {
+            window.google.accounts.id.cancel();
+          }
+          
           // Redirect to home
           router.push('/');
         };
@@ -99,7 +104,7 @@ export default function SavedResponses() {
         // If no user data in localStorage, clear everything and redirect
         if (!savedUser) {
           console.log('No user data found in localStorage, signing out');
-          clearAndRedirect();
+          await clearAndRedirect();
           return;
         }
 
@@ -110,13 +115,13 @@ export default function SavedResponses() {
           console.log('Found saved user:', userEmail);
         } catch (e) {
           console.error('Failed to parse saved user data:', e);
-          clearAndRedirect();
+          await clearAndRedirect();
           return;
         }
 
         if (!userEmail) {
           console.log('No user email found in saved data, signing out');
-          clearAndRedirect();
+          await clearAndRedirect();
           return;
         }
 
@@ -127,7 +132,7 @@ export default function SavedResponses() {
         
         if (!response.ok) {
           console.error('Failed to fetch subscription data');
-          clearAndRedirect();
+          await clearAndRedirect();
           return;
         }
         
@@ -155,15 +160,21 @@ export default function SavedResponses() {
       } catch (error) {
         console.error('Error loading user data:', error);
         // Clear everything on error too
-        setUser(null);
-        setIsSignedIn(false);
-        setResponses([]);
-        setSubscriptionStatus('free');
-        setSubscriptionDetails(null);
-        setIsPremium(false);
-        localStorage.removeItem('smoothrizz_user');
-        localStorage.removeItem('current_responses');
-        router.push('/');
+        const clearAndRedirect = async () => {
+          setUser(null);
+          setIsSignedIn(false);
+          setResponses([]);
+          setSubscriptionStatus('free');
+          setSubscriptionDetails(null);
+          setIsPremium(false);
+          localStorage.removeItem('smoothrizz_user');
+          localStorage.removeItem('current_responses');
+          if (window.google?.accounts?.id) {
+            window.google.accounts.id.cancel();
+          }
+          router.push('/');
+        };
+        await clearAndRedirect();
       } finally {
         setIsLoading(false);
       }
