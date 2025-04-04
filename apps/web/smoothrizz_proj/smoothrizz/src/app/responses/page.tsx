@@ -252,15 +252,24 @@ export default function ResponsesPage() {
       try {
         // First check if we have a user in localStorage
         const storedUser = localStorage.getItem('smoothrizz_user');
+        
+        // If no stored user, treat as anonymous
         if (!storedUser) {
-          console.log('No stored user found, redirecting to home');
-          router.push('/');
+          console.log('No stored user, proceeding as anonymous');
+          setUser(null);
+          setIsSignedIn(false);
+          
+          // Get anonymous usage from localStorage
+          const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
+          setUsageCount(savedUsage.dailySwipes || 0);
+          setIsPremium(false);
           return;
         }
 
+        // If we have a stored user, verify their session
         const user = JSON.parse(storedUser);
         
-        // Verify the session with backend using the correct endpoint
+        // Verify the session with backend
         const sessionResponse = await fetch(`${API_BASE_URL}/auth/verify`, {
           method: 'POST',
           headers: {
@@ -270,9 +279,13 @@ export default function ResponsesPage() {
         });
 
         if (!sessionResponse.ok) {
-          console.log('Session verification failed, redirecting to home');
+          console.log('Session verification failed, proceeding as anonymous');
           localStorage.removeItem('smoothrizz_user');
-          router.push('/');
+          setUser(null);
+          setIsSignedIn(false);
+          const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
+          setUsageCount(savedUsage.dailySwipes || 0);
+          setIsPremium(false);
           return;
         }
 
@@ -292,8 +305,13 @@ export default function ResponsesPage() {
 
       } catch (error) {
         console.error('Auth check error:', error);
+        // On error, proceed as anonymous
         localStorage.removeItem('smoothrizz_user');
-        router.push('/');
+        setUser(null);
+        setIsSignedIn(false);
+        const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
+        setUsageCount(savedUsage.dailySwipes || 0);
+        setIsPremium(false);
       }
     };
     
@@ -308,7 +326,28 @@ export default function ResponsesPage() {
     if (direction !== 'left' && direction !== 'right') return;
     
     try {
-      // Track swipe first
+      // For anonymous users, track usage locally first
+      if (!isSignedIn) {
+        const savedUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
+        const currentSwipes = savedUsage.dailySwipes || 0;
+        
+        // Check anonymous limit
+        if (currentSwipes >= ANONYMOUS_USAGE_LIMIT) {
+          setShowSignInOverlay(true);
+          sessionStorage.setItem('anon_limit_triggered', 'true');
+          return;
+        }
+        
+        // Update local usage count
+        const newUsage = {
+          dailySwipes: currentSwipes + 1,
+          lastUpdated: new Date().toISOString()
+        };
+        localStorage.setItem('smoothrizz_usage', JSON.stringify(newUsage));
+        setUsageCount(newUsage.dailySwipes);
+      }
+      
+      // Track swipe with backend
       const headers = {
         'Content-Type': 'application/json',
         ...(user?.email && { 'x-user-email': user.email })
@@ -322,23 +361,20 @@ export default function ResponsesPage() {
 
       const data = await response.json();
       
-      // Handle usage limits
-      if (!data.canSwipe) {
-        if (data.requiresSignIn) {
-          sessionStorage.setItem('anon_limit_triggered', 'true');
-          setShowSignInOverlay(true);
-          return;
-        } else if (data.requiresUpgrade) {
-          setShowUpgradePopup(true);
+      // For signed in users, handle usage limits from server response
+      if (isSignedIn) {
+        if (!data.canSwipe) {
+          if (data.requiresUpgrade) {
+            setShowUpgradePopup(true);
+            return;
+          }
+          // If we can't swipe for any other reason, return early
           return;
         }
-        // If we can't swipe for any other reason, return early
-        return;
+        // Update usage count from response
+        setUsageCount(data.dailySwipes || 0);
       }
 
-      // Update usage count from response
-      setUsageCount(data.dailySwipes || 0);
-      
       // Save response to localStorage if right swipe
       if (direction === 'right') {
         const newResponse = {
@@ -348,14 +384,25 @@ export default function ResponsesPage() {
           created_at: new Date().toISOString()
         };
 
-        // Always save to localStorage for potential migration later
-        const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
-        savedResponses.unshift(newResponse);
-        localStorage.setItem('anonymous_saved_responses', JSON.stringify(savedResponses));
-        
-        // If user is signed in, also save to their account
-        if (user?.email) {
+        // For anonymous users, save to anonymous storage
+        if (!isSignedIn) {
+          const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
+          savedResponses.unshift(newResponse);
+          localStorage.setItem('anonymous_saved_responses', JSON.stringify(savedResponses));
+          
+          // Update learning percentage for anonymous users
+          const percentage = Math.min(
+            savedResponses.length * FREE_INCREMENT_PER_RESPONSE,
+            FREE_MAX_PERCENTAGE
+          );
+          setMatchPercentage(Math.max(percentage, MIN_LEARNING_PERCENTAGE));
+        } else {
+          // For signed in users, save to their account
           try {
+            if (!user?.email) {
+              throw new Error('User email not found');
+            }
+            
             await fetch(`${API_BASE_URL}/api/saved-responses`, {
               method: 'POST',
               headers: {
@@ -382,14 +429,6 @@ export default function ResponsesPage() {
           } catch (error) {
             console.error('Error saving response to account:', error);
           }
-        } else {
-          // For anonymous users, calculate directly from localStorage
-          const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
-          const percentage = Math.min(
-            savedResponses.length * FREE_INCREMENT_PER_RESPONSE,
-            FREE_MAX_PERCENTAGE
-          );
-          setMatchPercentage(Math.max(percentage, MIN_LEARNING_PERCENTAGE));
         }
       }
 
