@@ -253,11 +253,22 @@ export default function SavedResponses() {
 
   const handleSignOut = async () => {
     try {
+      // Sign out from Google if the Google API is available
+      if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+        // Use the cancel method which is definitely available
+        window.google.accounts.id.cancel();
+      }
+
+      // Clear localStorage
+      localStorage.removeItem('smoothrizz_user');
+      localStorage.removeItem('current_responses');
+
       // Clear React state
       setUser(null);
       setResponses([]);
       setSubscriptionStatus('free');
       setSubscriptionDetails(null);
+      setIsSignedIn(false);
 
       // Redirect to home page
       router.push('/');
