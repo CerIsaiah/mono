@@ -685,9 +685,17 @@ export default function SavedResponses() {
                           </svg>
                           Trial Active
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {subscriptionDetails?.trialEndsAt ? `${formatTimeRemaining(subscriptionDetails.trialEndsAt)} days remaining in trial` : 'Trial period active'}
-                        </p>
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-400">
+                            {subscriptionDetails?.trialEndsAt ? `${formatTimeRemaining(subscriptionDetails.trialEndsAt)} days remaining in trial` : 'Trial period active'}
+                          </p>
+                          {subscriptionDetails?.trialEndsAt && (
+                            <p className="text-xs text-gray-500">
+                              Trial started {new Date(new Date(subscriptionDetails.trialEndsAt).getTime() - (3 * 24 * 60 * 60 * 1000)).toLocaleDateString()} 
+                              · Ends {new Date(subscriptionDetails.trialEndsAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
                       </>
                     ) : subscriptionStatus === 'premium' && subscriptionDetails ? (
                       <>
@@ -708,7 +716,12 @@ export default function SavedResponses() {
                             }
                           </p>
                           {!subscriptionDetails.isCanceled && (
-                            <p className="text-xs text-gray-500">Your card will be automatically charged</p>
+                            <>
+                              <p className="text-xs text-gray-500">Your card will be automatically charged</p>
+                              <p className="text-xs text-gray-400">
+                                {formatTimeRemaining(subscriptionDetails.subscriptionEndsAt!)} days until next charge
+                              </p>
+                            </>
                           )}
                         </div>
                       </>
