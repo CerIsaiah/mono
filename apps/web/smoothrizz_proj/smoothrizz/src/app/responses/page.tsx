@@ -98,8 +98,22 @@ function RegeneratePopup({ onRegenerate, onClose }: RegeneratePopupProps) {
   );
 }
 
-// Update PhotoPreview component to handle outside clicks
+// Update PhotoPreview component to handle outside clicks and errors
 function PhotoPreview({ imageUrl, onClose }: PhotoPreviewProps) {
+  const [error, setError] = useState<boolean>(false);
+
+  useEffect(() => {
+    console.log('PhotoPreview mounted with imageUrl:', {
+      hasUrl: !!imageUrl,
+      urlLength: imageUrl?.length
+    });
+  }, [imageUrl]);
+
+  const handleImageError = () => {
+    console.error('Failed to load image in PhotoPreview');
+    setError(true);
+  };
+
   return (
     <div 
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
@@ -116,11 +130,18 @@ function PhotoPreview({ imageUrl, onClose }: PhotoPreviewProps) {
         >
           ×
         </button>
-        <img 
-          src={imageUrl} 
-          alt="Uploaded screenshot"
-          className="w-full h-full object-contain"
-        />
+        {error ? (
+          <div className="flex items-center justify-center h-48 text-red-500">
+            Failed to load image. Please try again.
+          </div>
+        ) : (
+          <img 
+            src={imageUrl} 
+            alt="Uploaded screenshot"
+            className="w-full h-full object-contain"
+            onError={handleImageError}
+          />
+        )}
       </div>
     </div>
   );
@@ -178,7 +199,8 @@ export default function ResponsesPage() {
         hasFile: !!savedData.lastFile,
         hasContext: !!savedData.lastContext,
         hasText: !!savedData.lastText,
-        mode: savedData.mode
+        mode: savedData.mode,
+        fileLength: savedData.lastFile?.length
       });
       
       // Set all the state values
@@ -201,6 +223,17 @@ export default function ResponsesPage() {
       router.push('/');
     }
   }, [router]);
+
+  // Add debug logging for photo preview
+  useEffect(() => {
+    if (showPreview) {
+      console.log('Photo preview state:', {
+        showPreview,
+        hasLastFile: !!lastFile,
+        fileLength: lastFile?.length
+      });
+    }
+  }, [showPreview, lastFile]);
 
   // Update auth check effect
   useEffect(() => {
@@ -733,12 +766,24 @@ export default function ResponsesPage() {
         <div className="flex flex-col space-y-4 pt-3 pb-2">
           {/* Top buttons container */}
           <div className="flex justify-center gap-1.5 z-20">
-            <button
-              onClick={() => setShowPreview(true)}
-              className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded-full bg-white/90 backdrop-blur-sm text-[11px] shadow-sm font-medium"
-            >
-              Review Photo
-            </button>
+            {lastFile && (
+              <button
+                onClick={() => {
+                  console.log('Opening photo preview with file:', {
+                    hasFile: !!lastFile,
+                    fileLength: lastFile?.length
+                  });
+                  setShowPreview(true);
+                }}
+                className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded-full bg-white/90 backdrop-blur-sm text-[11px] shadow-sm font-medium flex items-center gap-1"
+                title="View the uploaded screenshot"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Review Photo
+              </button>
+            )}
             
             {/* Show Saved button for everyone, but prompt sign in if not authenticated */}
             <button
