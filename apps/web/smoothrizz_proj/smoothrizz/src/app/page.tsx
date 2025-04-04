@@ -39,6 +39,8 @@ interface ResponseData {
   inputMode: 'screenshot' | 'text';
   timestamp: number;
   lastFile?: string;
+  spicyLevel?: number;
+  firstMoveIdeas?: string;
 }
 
 // Add this near the top of the file, after imports
@@ -185,6 +187,9 @@ export default function Home() {
   const currentIndexRef = useRef(currentIndex);
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
+  const [spicyLevel, setSpicyLevel] = useState(50); // Default to middle
+  const [firstMoveIdeas, setFirstMoveIdeas] = useState('');
+  const [showFirstMoveInput, setShowFirstMoveInput] = useState(false);
   const router = useRouter();
   const [showSignInOverlay, setShowSignInOverlay] = useState(false);
   const pathname = usePathname();
@@ -410,7 +415,9 @@ export default function Home() {
       hasLastText: !!lastText,
       mode,
       isSignedIn,
-      userEmail: user?.email
+      userEmail: user?.email,
+      spicyLevel,
+      hasFirstMoveIdeas: !!firstMoveIdeas
     });
 
     if (!selectedFile && (!context || !lastText)) {
@@ -469,6 +476,8 @@ export default function Home() {
           mode: mode || 'first-move',
           context: context || undefined,
           lastText: lastText || undefined,
+          spicyLevel,
+          firstMoveIdeas: firstMoveIdeas || undefined
         }),
       });
 
@@ -481,7 +490,9 @@ export default function Home() {
       const data = await response.json();
       await logEvent('responses_generated', {
         responseCount: data.responses?.length,
-        mode: mode
+        mode,
+        spicyLevel,
+        hasFirstMoveIdeas: !!firstMoveIdeas
       });
 
       // Create a complete data object with all necessary fields
@@ -493,7 +504,9 @@ export default function Home() {
         lastContext: context || '',
         lastText: lastText || '',
         inputMode: showTextInput ? 'text' : 'screenshot',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        spicyLevel,
+        firstMoveIdeas: firstMoveIdeas || ''
       };
 
       // Store the complete data in localStorage before navigation
@@ -1469,7 +1482,15 @@ export default function Home() {
                             ? "bg-pink-50 border-2 border-pink-200" 
                             : "bg-gray-50 hover:bg-gray-100 border-2 border-transparent"
                         }`}
-                        onClick={() => handleModeSelection(phase.name.toLowerCase().replace(" ", "-"))}
+                        onClick={() => {
+                          handleModeSelection(phase.name.toLowerCase().replace(" ", "-"));
+                          if (phase.name === "First Move") {
+                            setShowFirstMoveInput(true);
+                          } else {
+                            setShowFirstMoveInput(false);
+                            setFirstMoveIdeas('');
+                          }
+                        }}
                       >
                         <span className="text-2xl">{phase.emoji}</span>
                         <div className="text-left">
@@ -1487,6 +1508,45 @@ export default function Home() {
                     );
                   })}
                 </div>
+
+                {/* Spicy Meter */}
+                <div className="mt-6 p-4 bg-gray-50 rounded-xl border-2 border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">Response Style</label>
+                    <span className="text-sm text-gray-500">
+                      {spicyLevel <= 33 ? 'Just Friends' : spicyLevel <= 66 ? 'Lil Smooth' : 'Too Spicy'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={spicyLevel}
+                    onChange={(e) => setSpicyLevel(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                  />
+                  <div className="flex justify-between mt-1 text-xs text-gray-400">
+                    <span>Just Friends</span>
+                    <span>Lil Smooth</span>
+                    <span>Too Spicy</span>
+                  </div>
+                </div>
+
+                {/* First Move Ideas Input */}
+                {showFirstMoveInput && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-xl border-2 border-gray-100">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      What would you like to talk about? (Optional)
+                    </label>
+                    <textarea
+                      value={firstMoveIdeas}
+                      onChange={(e) => setFirstMoveIdeas(e.target.value)}
+                      placeholder="Share some topics or ideas you'd like to discuss. This helps generate more relevant responses!"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                      rows={3}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

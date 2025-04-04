@@ -36,10 +36,12 @@ function isValidBase64(str) {
   }
 }
 
-export async function analyzeScreenshot(file, mode, isSignedIn, context = '', lastText = '') {
+export async function analyzeScreenshot(file, mode, isSignedIn, context = '', lastText = '', spicyLevel = 50, firstMoveIdeas = '') {
   let requestBody = {
     mode,
-    isSignedIn
+    isSignedIn,
+    spicyLevel,
+    firstMoveIdeas
   };
 
   // Get user email from localStorage
@@ -84,7 +86,9 @@ export async function analyzeScreenshot(file, mode, isSignedIn, context = '', la
       hasImage: !!requestBody.imageBase64,
       hasContext: !!requestBody.context,
       hasLastText: !!requestBody.lastText,
-      mode: requestBody.mode
+      mode: requestBody.mode,
+      spicyLevel: requestBody.spicyLevel,
+      hasFirstMoveIdeas: !!requestBody.firstMoveIdeas
     });
 
     const response = await fetch(`${API_BASE_URL}/api/openai`, {

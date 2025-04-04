@@ -187,6 +187,12 @@ export default function ResponsesPage() {
   // Add new state for tracking if user can swipe
   const [canInteract, setCanInteract] = useState<boolean>(true);
 
+  // Add new state for spicyLevel
+  const [spicyLevel, setSpicyLevel] = useState<number>(50);
+
+  // Add new state for firstMoveIdeas
+  const [firstMoveIdeas, setFirstMoveIdeas] = useState<string>('');
+
   const childRefs = useRef<CardRef[]>(
     Array(responses.length)
       .fill(0)
@@ -209,6 +215,8 @@ export default function ResponsesPage() {
         hasContext: !!savedData.lastContext,
         hasText: !!savedData.lastText,
         mode: savedData.mode,
+        spicyLevel: savedData.spicyLevel,
+        hasFirstMoveIdeas: !!savedData.firstMoveIdeas,
         fileLength: savedData.lastFile?.length
       });
       
@@ -218,6 +226,8 @@ export default function ResponsesPage() {
       setLastFile(savedData.lastFile || null);
       setLastContext(savedData.lastContext || '');
       setLastText(savedData.lastText || '');
+      setSpicyLevel(savedData.spicyLevel || 50);
+      setFirstMoveIdeas(savedData.firstMoveIdeas || '');
       
       // Set current index last to avoid race conditions
       const savedIndex = savedData.currentIndex !== undefined ? savedData.currentIndex : savedData.responses.length - 1;
@@ -513,7 +523,9 @@ export default function ResponsesPage() {
           mode,
           lastFile: !!lastFile,
           lastContext,
-          lastText
+          lastText,
+          spicyLevel,
+          firstMoveIdeas
         }
       });
       
@@ -522,6 +534,8 @@ export default function ResponsesPage() {
       const currentLastFile = lastFile || savedData.lastFile;
       const currentLastContext = lastContext || savedData.lastContext || '';
       const currentLastText = lastText || savedData.lastText || '';
+      const currentSpicyLevel = spicyLevel || savedData.spicyLevel || 50;
+      const currentFirstMoveIdeas = firstMoveIdeas || savedData.firstMoveIdeas || '';
       
       // Validate inputs before proceeding
       if (!currentMode && !currentLastFile && !currentLastContext && !currentLastText) {
@@ -535,7 +549,9 @@ export default function ResponsesPage() {
         console.log('Regenerating with text input:', {
           mode: currentMode,
           contextLength: currentLastContext.length,
-          textLength: currentLastText.length
+          textLength: currentLastText.length,
+          spicyLevel: currentSpicyLevel,
+          hasFirstMoveIdeas: !!currentFirstMoveIdeas
         });
         
         newResponses = await analyzeScreenshot(
@@ -543,12 +559,16 @@ export default function ResponsesPage() {
           currentMode,
           isSignedIn,
           currentLastContext,
-          currentLastText
+          currentLastText,
+          currentSpicyLevel,
+          currentFirstMoveIdeas
         );
       } else if (currentLastFile) {
         console.log('Regenerating with file input:', {
           mode: currentMode,
-          fileLength: currentLastFile.length
+          fileLength: currentLastFile.length,
+          spicyLevel: currentSpicyLevel,
+          hasFirstMoveIdeas: !!currentFirstMoveIdeas
         });
         
         const file = await base64ToFile(currentLastFile, 'screenshot.png');
@@ -562,7 +582,9 @@ export default function ResponsesPage() {
           currentMode,
           isSignedIn,
           currentLastContext,
-          currentLastText
+          currentLastText,
+          currentSpicyLevel,
+          currentFirstMoveIdeas
         );
       } else {
         throw new Error('No valid input found for regeneration. Please return to home and try again.');
@@ -586,6 +608,8 @@ export default function ResponsesPage() {
         lastContext: currentLastContext,
         lastText: currentLastText,
         inputMode: savedData.inputMode || (currentLastContext && currentLastText ? 'text' : 'screenshot'),
+        spicyLevel: currentSpicyLevel,
+        firstMoveIdeas: currentFirstMoveIdeas,
         requestId: savedData.requestId
       };
       
@@ -596,7 +620,9 @@ export default function ResponsesPage() {
         hasMode: !!updatedSavedData.mode,
         hasFile: !!updatedSavedData.lastFile,
         hasContext: !!updatedSavedData.lastContext,
-        hasText: !!updatedSavedData.lastText
+        hasText: !!updatedSavedData.lastText,
+        spicyLevel: updatedSavedData.spicyLevel,
+        hasFirstMoveIdeas: !!updatedSavedData.firstMoveIdeas
       });
       
       localStorage.setItem('current_responses', JSON.stringify(updatedSavedData));

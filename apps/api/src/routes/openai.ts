@@ -24,6 +24,11 @@ INSTRUCTIONS###
    - Identify consistent tone between you as the responder and the person on the left (playful/serious/flirty)
    - Note SINGLE-USE references (treat single mentions as moments, not patterns)
    - Track relationship milestones (dates/complaints/intimacy levels)
+   - Consider provided first move ideas if available
+   - Adjust response spiciness based on spiciness level (0-100):
+     * 0-33: "Just Friends" - Keep it friendly and casual, minimal flirting
+     * 34-66: "Lil Smooth" - Playful flirting and light teasing
+     * 67-100: "Too Spicy" - More direct flirting and bold responses
 
 2. AVAILABLE STYLES:
     - Enthusiastic + pivot
@@ -44,6 +49,8 @@ INSTRUCTIONS###
    - Maintain natural progression
    - Acknowledge context without over-repetition
    - Match established familiarity level
+   - Adjust flirtiness based on spiciness level
+   - Incorporate first move ideas naturally if provided
    - Prioritize: Playful > Creative > Forward > Neutral
 
 2. FORMAT REQUIREMENTS:
@@ -56,6 +63,7 @@ INSTRUCTIONS###
 
 STRATEGY EXAMPLES###
 My input: "Thanks daddy" → Their input: "I'm your daddy?"
+
 Acceptable Responses:
 ["Ig we'll see after the dinner", "Or I can take on the role, if you want", [...],  [...],  [...],  [...],  [...],  [...],  [...], "Hmm, you'll have to earn that title"]
 
@@ -76,17 +84,19 @@ router.post('/openai', async (req, res) => {
     //const usageStatus = await checkUsageStatus(identifier, isEmail);
 
     
-    const { imageBase64, mode = 'first-move', context, lastText } = req.body;
+    const { imageBase64, mode = 'first-move', context, lastText, spicyLevel = 50, firstMoveIdeas = '' } = req.body;
 
     console.log('Debug - OpenAI Request:', {
       ip: requestIP,
       isSignedIn: !!userEmail,
       timestamp: new Date().toISOString(),
+      spicyLevel,
+      hasFirstMoveIdeas: !!firstMoveIdeas,
     });
 
     let userMessage: any[] = [{
       type: 'text',
-      text: 'What should I say back?',
+      text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas: ${firstMoveIdeas}` : ''}`,
     }];
 
     if (imageBase64) {
@@ -98,7 +108,7 @@ router.post('/openai', async (req, res) => {
       userMessage = [
         {
           type: 'text',
-          text: 'What should I say back?',
+          text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas: ${firstMoveIdeas}` : ''}`,
         },
         {
           type: 'image_url',
@@ -111,7 +121,7 @@ router.post('/openai', async (req, res) => {
       userMessage = [
         {
           type: 'text',
-          text: `Context of conversation: ${context}\n\nLast message from them: ${lastText}\n\nWhat should I say back?`,
+          text: `Context of conversation: ${context}\n\nLast message from them: ${lastText}\n\nWhat should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas: ${firstMoveIdeas}` : ''}`,
         },
       ];
     }
