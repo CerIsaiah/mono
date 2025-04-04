@@ -723,13 +723,28 @@ export default function ResponsesPage() {
     try {
       const token = response.credential;
       
-      // Call the Google auth endpoint to handle swipe transfer
+      // Get anonymous data before signing in
+      const anonymousResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
+      const anonymousUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
+      
+      console.log('Migrating anonymous data:', {
+        savedResponses: anonymousResponses.length,
+        dailySwipes: anonymousUsage.dailySwipes || 0
+      });
+      
+      // Call the Google auth endpoint with anonymous data
       const authResponse = await fetch(`${API_BASE_URL}/auth/google`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ credential: token })
+        body: JSON.stringify({ 
+          credential: token,
+          anonymousData: {
+            savedResponses: anonymousResponses,
+            dailySwipes: anonymousUsage.dailySwipes || 0
+          }
+        })
       });
       
       if (!authResponse.ok) {
@@ -742,6 +757,10 @@ export default function ResponsesPage() {
         name: authData.user.name,
         picture: authData.user.avatar_url
       };
+      
+      // Clear anonymous data since backend has handled the migration
+      localStorage.removeItem('anonymous_saved_responses');
+      localStorage.removeItem('smoothrizz_usage');
       
       localStorage.setItem('smoothrizz_user', JSON.stringify(user));
       setUser(user);
