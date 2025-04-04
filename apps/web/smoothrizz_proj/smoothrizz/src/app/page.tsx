@@ -551,10 +551,12 @@ export default function Home() {
 
   // Update preview completion
   useEffect(() => {
-    if (selectedFile || (context && lastText)) {
+    if (selectedFile || (showTextInput && context && lastText)) {
       setCompletedSteps(prev => ({ ...prev, preview: true }));
+    } else {
+      setCompletedSteps(prev => ({ ...prev, preview: false }));
     }
-  }, [selectedFile, context, lastText]);
+  }, [selectedFile, context, lastText, showTextInput]);
 
   // Add this useEffect to detect when user scrolls to preview section
   useEffect(() => {
@@ -756,13 +758,27 @@ export default function Home() {
       hasLastText: !!lastText
     });
     setShowTextInput(newState);
+    
+    // Reset file-related state when enabling text input
+    if (newState) {
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setInputMode('text');
+    } else {
+      setContext('');
+      setLastText('');
+      setInputMode('screenshot');
+      setCompletedSteps(prev => ({ ...prev, upload: false }));
+    }
   };
 
   // Update handleTextInputChange
   const handleTextInputChange = (field: 'context' | 'lastText', value: string) => {
     if (field === 'context') {
       setContext(value);
+      setInputMode('text');
       if (value && lastText) {
+        setCompletedSteps(prev => ({ ...prev, upload: true }));
         logEvent('text_input_complete', {
           field,
           hasContext: true,
@@ -771,13 +787,21 @@ export default function Home() {
       }
     } else if (field === 'lastText') {
       setLastText(value);
+      setInputMode('text');
       if (context && value) {
+        setCompletedSteps(prev => ({ ...prev, upload: true }));
         logEvent('text_input_complete', {
           field,
           hasContext: true,
           hasLastText: true
         });
       }
+    }
+
+    // Reset file-related state when using text input
+    if (selectedFile) {
+      setSelectedFile(null);
+      setPreviewUrl(null);
     }
   };
 
