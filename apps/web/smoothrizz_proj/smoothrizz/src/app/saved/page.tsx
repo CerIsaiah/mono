@@ -78,21 +78,45 @@ export default function SavedResponses() {
       try {
         // Get the saved user email from localStorage
         const savedUser = localStorage.getItem('smoothrizz_user');
-        let userEmail;
         
-        if (savedUser) {
-          try {
-            const parsedUser = JSON.parse(savedUser);
-            userEmail = parsedUser.email;
-          } catch (e) {
-            console.error('Failed to parse saved user data:', e);
-            localStorage.removeItem('smoothrizz_user');
-          }
+        const clearAndRedirect = () => {
+          // Clear all user-related state
+          setUser(null);
+          setIsSignedIn(false);
+          setResponses([]);
+          setSubscriptionStatus('free');
+          setSubscriptionDetails(null);
+          setIsPremium(false);
+          
+          // Clear localStorage
+          localStorage.removeItem('smoothrizz_user');
+          localStorage.removeItem('current_responses');
+          
+          // Redirect to home
+          router.push('/');
+        };
+
+        // If no user data in localStorage, clear everything and redirect
+        if (!savedUser) {
+          console.log('No user data found in localStorage, signing out');
+          clearAndRedirect();
+          return;
+        }
+
+        let userEmail;
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          userEmail = parsedUser.email;
+          console.log('Found saved user:', userEmail);
+        } catch (e) {
+          console.error('Failed to parse saved user data:', e);
+          clearAndRedirect();
+          return;
         }
 
         if (!userEmail) {
-          console.log('No user email found, redirecting to home');
-          router.push('/');
+          console.log('No user email found in saved data, signing out');
+          clearAndRedirect();
           return;
         }
 
@@ -103,7 +127,7 @@ export default function SavedResponses() {
         
         if (!response.ok) {
           console.error('Failed to fetch subscription data');
-          router.push('/');
+          clearAndRedirect();
           return;
         }
         
@@ -130,6 +154,15 @@ export default function SavedResponses() {
         await fetchSavedResponses(userEmail);
       } catch (error) {
         console.error('Error loading user data:', error);
+        // Clear everything on error too
+        setUser(null);
+        setIsSignedIn(false);
+        setResponses([]);
+        setSubscriptionStatus('free');
+        setSubscriptionDetails(null);
+        setIsPremium(false);
+        localStorage.removeItem('smoothrizz_user');
+        localStorage.removeItem('current_responses');
         router.push('/');
       } finally {
         setIsLoading(false);
