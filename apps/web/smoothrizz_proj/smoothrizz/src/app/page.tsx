@@ -1513,20 +1513,25 @@ export default function Home() {
                 <div className="mt-6 p-4 bg-gradient-to-r from-pink-50/50 to-rose-50/50 rounded-xl border-2 border-gray-100">
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm font-medium text-gray-700">Response Style</label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl transition-all duration-300">
-                        {spicyLevel <= 33 ? '😊' : spicyLevel <= 66 ? '😏' : '🌶️'}
-                      </span>
-                      <span className={`text-sm font-medium transition-all duration-300 ${
-                        spicyLevel <= 33 ? 'text-green-600' : 
-                        spicyLevel <= 66 ? 'text-orange-500' : 
-                        'text-red-500'
-                      }`}>
-                        {spicyLevel <= 33 ? 'Just Friends' : spicyLevel <= 66 ? 'Lil Smooth' : 'Too Spicy'}
-                      </span>
-                    </div>
+                    <span className={`text-sm font-medium transition-all duration-300 ${
+                      spicyLevel <= 33 ? 'text-green-600' : 
+                      spicyLevel <= 66 ? 'text-orange-500' : 
+                      'text-red-500'
+                    }`}>
+                      {spicyLevel <= 33 ? 'Just Friends' : spicyLevel <= 66 ? 'Lil Smooth' : 'Too Spicy'}
+                    </span>
                   </div>
-                  <div className="relative">
+                  <div className="relative mt-6">
+                    {/* Emoji above slider dot */}
+                    <div 
+                      className="absolute -top-8 transition-all duration-300 text-2xl"
+                      style={{ 
+                        left: `calc(${spicyLevel}% - 12px)`,
+                        transform: 'translateX(-50%)',
+                      }}
+                    >
+                      {spicyLevel <= 33 ? '😊' : spicyLevel <= 66 ? '😏' : '🌶️'}
+                    </div>
                     <input
                       type="range"
                       min="0"
@@ -1542,15 +1547,9 @@ export default function Home() {
                       }}
                     />
                     <div className="absolute -bottom-6 left-0 right-0 flex justify-between text-xs">
-                      <span className="text-green-600 flex items-center gap-1">
-                        <span className="hidden sm:inline">Just Friends</span> 😊
-                      </span>
-                      <span className="text-orange-500 flex items-center gap-1">
-                        <span className="hidden sm:inline">Lil Smooth</span> 😏
-                      </span>
-                      <span className="text-red-500 flex items-center gap-1">
-                        <span className="hidden sm:inline">Too Spicy</span> 🌶️
-                      </span>
+                      <span className="text-green-600">Just Friends</span>
+                      <span className="text-orange-500">Lil Smooth</span>
+                      <span className="text-red-500">Too Spicy</span>
                     </div>
                   </div>
                 </div>
@@ -1625,13 +1624,73 @@ export default function Home() {
           
           <div className="border-t border-gray-200 my-16"></div>
 
+          {/* Articles Section */}
+          <section className="mt-16 sm:mt-24 px-4 sm:px-0 mb-16">
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-gradient-to-br from-pink-50/80 via-white to-rose-50/80 rounded-xl shadow-sm overflow-hidden border border-pink-100">
+                <div className="p-6 sm:p-8">
+                  <h2 className="text-2xl sm:text-3xl font-bold mb-8 text-center bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
+                    Learn From Our Experts
+                  </h2>
+                  <div className="grid sm:grid-cols-2 gap-8">
+                    <Link 
+                      href="/blog/how-to-rizz-techniques-that-actually-work"
+                      className="group block overflow-hidden rounded-xl hover:shadow-lg transition-shadow bg-white"
+                    >
+                      <div className="relative w-full h-48">
+                        <Image
+                          src="/pics/thumbs-up.png"
+                          alt="Modern messaging techniques guide"
+                          fill
+                          className="object-cover transform group-hover:scale-105 transition-transform duration-300"
+                          priority
+                        />
+                      </div>
+                      <div className="p-4 bg-gradient-to-r from-pink-50/50 to-rose-50/50">
+                        <h3 className="font-semibold text-lg group-hover:text-pink-500 transition-colors">
+                          How to Rizz: Techniques That You Can Use in 2025
+                        </h3>
+                        <p className="text-gray-600 mt-2 text-sm">
+                          Learn proven techniques to improve your messaging game and build better connections.
+                        </p>
+                      </div>
+                    </Link>
+
+                    <Link 
+                      href="/blog/best-rizz-lines-100-plus-examples-that-actually-work"
+                      className="group block overflow-hidden rounded-xl hover:shadow-lg transition-shadow bg-white"
+                    >
+                      <div className="relative w-full h-48">
+                        <Image
+                          src="/pics/percent100.png"
+                          alt="Best rizz lines guide"
+                          fill
+                          className="object-cover transform group-hover:scale-105 transition-transform duration-300"
+                          priority
+                        />
+                      </div>
+                      <div className="p-4 bg-gradient-to-r from-pink-50/50 to-rose-50/50">
+                        <h3 className="font-semibold text-lg group-hover:text-pink-500 transition-colors">
+                          Best Rizz Lines: 100+ Examples That Work
+                        </h3>
+                        <p className="text-gray-600 mt-2 text-sm">
+                          Rizz Pick up Lines That Work in 2025
+                        </p>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* FAQ Section */}
           <section className="mt-16 px-4 sm:px-0 mb-16">
             <div className="max-w-3xl mx-auto">
               <h2 className="text-2xl sm:text-3xl font-bold mb-8 text-center bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
                 Frequently Asked Questions
               </h2>
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {[
                   {
                     q: "What's the Spicy Meter?",
@@ -1654,9 +1713,26 @@ export default function Home() {
                     a: "Yes! Swipe right on responses you like to save them. Premium users can organize and access their saved responses anytime."
                   }
                 ].map((faq, i) => (
-                  <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-pink-100">
-                    <h3 className="font-semibold text-lg mb-2 text-gray-900">{faq.q}</h3>
-                    <p className="text-gray-600">{faq.a}</p>
+                  <div key={i} className="bg-white rounded-xl shadow-sm border border-pink-100 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        const element = document.getElementById(`faq-${i}`);
+                        if (element) {
+                          element.classList.toggle('hidden');
+                        }
+                      }}
+                      className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-pink-50/50 transition-colors"
+                    >
+                      <h3 className="font-semibold text-lg text-gray-900">{faq.q}</h3>
+                      <svg className="w-5 h-5 text-gray-500 transform transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <div id={`faq-${i}`} className="hidden">
+                      <p className="px-6 py-4 text-gray-600 border-t border-pink-100/50">
+                        {faq.a}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
