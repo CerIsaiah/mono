@@ -174,16 +174,23 @@ export default function ResponsesPage() {
         responseCount: savedData.responses.length,
         savedIndex: savedData.currentIndex,
         defaultIndex: savedData.responses.length - 1,
-        inputMode: savedData.inputMode
+        inputMode: savedData.inputMode,
+        hasFile: !!savedData.lastFile,
+        hasContext: !!savedData.lastContext,
+        hasText: !!savedData.lastText,
+        mode: savedData.mode
       });
       
+      // Set all the state values
       setResponses(savedData.responses);
+      setMode(savedData.mode || null);
+      setLastFile(savedData.lastFile || null);
+      setLastContext(savedData.lastContext || '');
+      setLastText(savedData.lastText || '');
+      
+      // Set current index last to avoid race conditions
       const savedIndex = savedData.currentIndex !== undefined ? savedData.currentIndex : savedData.responses.length - 1;
       setCurrentIndex(savedIndex);
-      setMode(savedData.mode);
-      setLastFile(savedData.lastFile);
-      setLastContext(savedData.lastContext);
-      setLastText(savedData.lastText);
       
       // Update childRefs to match the number of responses
       childRefs.current = Array(savedData.responses.length)
@@ -404,13 +411,31 @@ export default function ResponsesPage() {
       
       // Get the current saved data to ensure we have the input
       const savedData = JSON.parse(localStorage.getItem('current_responses') || '{}');
-      const inputMode = savedData.inputMode;
-      const currentLastFile = savedData.lastFile || lastFile;
-      const currentLastContext = savedData.lastContext || lastContext;
-      const currentLastText = savedData.lastText || lastText;
       
-      console.log('Regenerating with:', {
-        inputMode,
+      // Log the current state and saved data
+      console.log('Current state:', {
+        mode,
+        hasFile: !!lastFile,
+        hasContext: !!lastContext,
+        hasText: !!lastText
+      });
+      
+      console.log('Saved data:', {
+        mode: savedData.mode,
+        hasFile: !!savedData.lastFile,
+        hasContext: !!savedData.lastContext,
+        hasText: !!savedData.lastText,
+        inputMode: savedData.inputMode
+      });
+
+      // Use saved data with fallback to current state
+      const currentMode = mode || savedData.mode;
+      const currentLastFile = lastFile || savedData.lastFile;
+      const currentLastContext = lastContext || savedData.lastContext || '';
+      const currentLastText = lastText || savedData.lastText || '';
+      
+      console.log('Using regeneration data:', {
+        hasMode: !!currentMode,
         hasFile: !!currentLastFile,
         hasContext: !!currentLastContext,
         hasText: !!currentLastText
@@ -421,15 +446,17 @@ export default function ResponsesPage() {
       // Check if we're using text input or file input
       if (currentLastContext && currentLastText) {
         // Text input path
+        console.log('Regenerating with text input');
         newResponses = await analyzeScreenshot(
           null, // no file
-          mode || savedData.mode,
+          currentMode,
           isSignedIn,
           currentLastContext,
           currentLastText
         );
       } else if (currentLastFile) {
         // File input path
+        console.log('Regenerating with file input');
         const file = await base64ToFile(currentLastFile, 'screenshot.png');
         
         if (!file) {
@@ -438,12 +465,18 @@ export default function ResponsesPage() {
 
         newResponses = await analyzeScreenshot(
           file,
-          mode || savedData.mode,
+          currentMode,
           isSignedIn,
-          currentLastContext || '',
-          currentLastText || ''
+          currentLastContext,
+          currentLastText
         );
       } else {
+        console.error('No valid input found for regeneration:', {
+          currentMode,
+          hasFile: !!currentLastFile,
+          hasContext: !!currentLastContext,
+          hasText: !!currentLastText
+        });
         throw new Error('No input available for regeneration - please return to home and try again');
       }
       
@@ -460,11 +493,11 @@ export default function ResponsesPage() {
       const updatedSavedData = {
         responses: newResponses,
         currentIndex: newResponses.length - 1,
-        mode: mode || savedData.mode,
+        mode: currentMode,
         lastFile: currentLastFile,
         lastContext: currentLastContext,
         lastText: currentLastText,
-        inputMode: inputMode || (currentLastContext && currentLastText ? 'text' : 'screenshot'),
+        inputMode: savedData.inputMode || (currentLastContext && currentLastText ? 'text' : 'screenshot'),
         requestId: savedData.requestId
       };
       localStorage.setItem('current_responses', JSON.stringify(updatedSavedData));
