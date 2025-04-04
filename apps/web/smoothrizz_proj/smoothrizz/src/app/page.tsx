@@ -1602,12 +1602,12 @@ export default function Home() {
                 {showFirstMoveInput && (
                   <div className="mt-4 p-4 bg-gray-50 rounded-xl border-2 border-gray-100">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      What would you like to talk about? (Optional)
+                      Any Topics or Ideas for the First ove? (Optional)
                     </label>
                     <textarea
                       value={firstMoveIdeas}
                       onChange={(e) => setFirstMoveIdeas(e.target.value)}
-                      placeholder="Share some topics or ideas you'd like to discuss. This helps generate more relevant responses!"
+                      placeholder="First move ideads: Put any connections you have with the person or topics you'd like to discuss."
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                       rows={3}
                     />
