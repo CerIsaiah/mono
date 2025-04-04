@@ -6,6 +6,11 @@ interface LogEvent {
   timestamp?: string;
 }
 
+export async function GET() {
+  // Handle GET requests - return empty 200 OK response
+  return NextResponse.json({ message: 'Logging endpoint is active' });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: LogEvent = await request.json();
