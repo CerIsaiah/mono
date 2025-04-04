@@ -231,7 +231,12 @@ export default function SavedResponses() {
 
       const response = await fetch(
         `${API_BASE_URL}/api/saved-responses?email=${encodeURIComponent(user.email)}&timestamp=${encodeURIComponent(timestamp)}`,
-        { method: 'DELETE' }
+        { 
+          method: 'DELETE',
+          headers: {
+            'x-user-email': user.email
+          }
+        }
       );
 
       if (!response.ok) {

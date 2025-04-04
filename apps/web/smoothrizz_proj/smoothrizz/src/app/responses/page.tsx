@@ -323,9 +323,29 @@ export default function ResponsesPage() {
                 ...newResponse
               })
             });
+
+            // After successful save, fetch updated learning percentage
+            const learningResponse = await fetch(`${API_BASE_URL}/api/learning-percentage`, {
+              headers: {
+                'x-user-email': user.email
+              }
+            });
+            
+            if (learningResponse.ok) {
+              const learningData = await learningResponse.json();
+              setMatchPercentage(learningData.percentage);
+            }
           } catch (error) {
             console.error('Error saving response to account:', error);
           }
+        } else {
+          // For anonymous users, calculate directly from localStorage
+          const savedResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
+          const percentage = Math.min(
+            savedResponses.length * FREE_INCREMENT_PER_RESPONSE,
+            FREE_MAX_PERCENTAGE
+          );
+          setMatchPercentage(Math.max(percentage, MIN_LEARNING_PERCENTAGE));
         }
       }
 
