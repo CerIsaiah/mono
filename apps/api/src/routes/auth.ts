@@ -113,13 +113,28 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
       anonymousSwipes
     );
     
-    // Clear IP-based usage after transferring to user account
+    // Update user's daily usage to include anonymous swipes
     if (anonymousSwipes > 0) {
       const supabase = getSupabaseClient();
+      
+      // First update the user's daily usage
+      await supabase
+        .from('users')
+        .update({ 
+          daily_usage: user.daily_usage + anonymousSwipes,
+          total_usage: user.total_usage + anonymousSwipes
+        })
+        .eq('email', email);
+      
+      // Then clear IP-based usage
       await supabase
         .from('ip_usage')
         .update({ daily_usage: 0 })
         .eq('ip_address', requestIP);
+        
+      // Update the user object to reflect new usage
+      user.daily_usage += anonymousSwipes;
+      user.total_usage += anonymousSwipes;
     }
     
     // Check if user is premium or in trial period
