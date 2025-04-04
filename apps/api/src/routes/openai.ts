@@ -27,10 +27,10 @@ INSTRUCTIONS###
      * Relationship progression markers
      * Cultural/situational references from chat
    - Response must contain AT LEAST ONE:
-     ✓ Callback to specific previous detail (max 1 per response)
      ✓ Situation-relevant humor
      ✓ Shared experience reference
      ✓ Inside joke foundation
+     ✓ Focus on most recent conversational point
      ✓ Niche reference matching user's interests
 
 2. SPICE INTERPRETATION:
@@ -77,7 +77,7 @@ INSTRUCTIONS###
    - Natural response curve:
      High energy → Medium → Low → Medium → High
 
-      FORMAT REQUIREMENTS:
+6. FORMAT REQUIREMENTS:
    - EXACTLY 10 responses 
    - No emojis
    - 5 different styles, 2 of each
