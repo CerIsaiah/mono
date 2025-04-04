@@ -76,46 +76,70 @@ export default function SavedResponses() {
   useEffect(() => {
     const loadUserData = async () => {
       try {
-        // Get email from URL query parameter
-        const urlParams = new URLSearchParams(window.location.search);
-        const emailParam = urlParams.get('email');
+        // Get the saved user email from localStorage
+        const savedUser = localStorage.getItem('smoothrizz_user');
+        let userEmail;
         
-        if (!emailParam) {
-          console.log('No email parameter found, redirecting to home');
+        if (savedUser) {
+          try {
+            const parsedUser = JSON.parse(savedUser);
+            userEmail = parsedUser.email;
+          } catch (e) {
+            console.error('Failed to parse saved user data:', e);
+            localStorage.removeItem('smoothrizz_user');
+          }
+        }
+
+        if (!userEmail) {
+          console.log('No user email found, redirecting to home');
+          router.push('/');
+          return;
+        }
+
+        // Verify the session
+        const verifyResponse = await fetch(`${API_BASE_URL}/api/auth/verify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: userEmail })
+        });
+        
+        if (!verifyResponse.ok) {
+          console.error('Failed to verify session');
           router.push('/');
           return;
         }
         
-        // Fetch subscription status which contains user info
-        const response = await fetch(`${API_BASE_URL}/api/subscription/status?userEmail=${encodeURIComponent(emailParam)}`);
-        
-        if (!response.ok) {
-          console.error('Failed to fetch subscription data');
-          router.push('/');
-          return;
-        }
-        
-        const data = await response.json();
-        console.log('Subscription data:', data);
+        const verifyData = await verifyResponse.json();
+        console.log('Session verified:', verifyData);
         
         // Set subscription status and details
-        setSubscriptionStatus(data.status);
-        setSubscriptionDetails(data.details);
-        setIsPremium(data.status === 'premium' || data.status === 'trial');
+        setSubscriptionStatus(verifyData.isPremium ? (verifyData.isTrial ? 'trial' : 'premium') : 'free');
+        setSubscriptionDetails({
+          type: verifyData.isPremium ? 'premium' : null,
+          isTrialActive: verifyData.isTrial,
+          trialEndsAt: verifyData.trialEndsAt || null,
+          subscriptionEndsAt: null,
+          hadTrial: false,
+          isCanceled: false,
+          canceledDuringTrial: false
+        });
+        setIsPremium(verifyData.isPremium);
         
-        // Set basic user data
+        // Set basic user data from verify response
         const userData: User = {
-          id: emailParam,
-          email: emailParam,
-          name: emailParam.split('@')[0],
-          picture: undefined
+          id: verifyData.user.id,
+          email: verifyData.user.email,
+          name: verifyData.user.name || verifyData.user.email.split('@')[0],
+          picture: verifyData.user.avatar_url
         };
         
         setUser(userData);
         setIsSignedIn(true);
         
         // Fetch saved responses
-        await fetchSavedResponses(emailParam);
+        await fetchSavedResponses(verifyData.user.email);
       } catch (error) {
         console.error('Error loading user data:', error);
         router.push('/');
