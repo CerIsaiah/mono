@@ -114,6 +114,15 @@ function PhotoPreview({ imageUrl, onClose }: PhotoPreviewProps) {
     setError(true);
   };
 
+  // Format the image URL if it's a base64 string
+  const formattedImageUrl = useMemo(() => {
+    if (!imageUrl) return '';
+    // If it's already a data URL, return as is
+    if (imageUrl.startsWith('data:image/')) return imageUrl;
+    // If it's a base64 string, convert to data URL
+    return `data:image/png;base64,${imageUrl}`;
+  }, [imageUrl]);
+
   return (
     <div 
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
@@ -136,7 +145,7 @@ function PhotoPreview({ imageUrl, onClose }: PhotoPreviewProps) {
           </div>
         ) : (
           <img 
-            src={imageUrl} 
+            src={formattedImageUrl} 
             alt="Uploaded screenshot"
             className="w-full h-full object-contain"
             onError={handleImageError}
@@ -230,7 +239,9 @@ export default function ResponsesPage() {
       console.log('Photo preview state:', {
         showPreview,
         hasLastFile: !!lastFile,
-        fileLength: lastFile?.length
+        fileLength: lastFile?.length,
+        isDataUrl: lastFile?.startsWith('data:image/'),
+        isBase64: !lastFile?.startsWith('data:image/') && !!lastFile
       });
     }
   }, [showPreview, lastFile]);
