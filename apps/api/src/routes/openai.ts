@@ -16,44 +16,68 @@ const openai = new OpenAI({
 // System prompts stored securely on the server
 const SYSTEM_PROMPTS = {
   'first-move': `"""
-Return EXACTLY 10 responses of the following styles and format for flirty but not too forward conversation continuation following these requirements:
+Return EXACTLY 10 responses for flirty conversation continuation following these requirements:
+
 INSTRUCTIONS###
-1. ANALYZE CONTEXT:
-   - IMPORTANT! You are responding as the person on the right side of the conversation
-   - Read FULL conversation history
-   - Identify consistent tone between you as the responder and the person on the left (playful/serious/flirty)
-   - Note SINGLE-USE references (treat single mentions as moments, not patterns)
-   - Track relationship milestones (dates/complaints/intimacy levels)
-   - Consider provided first move ideas if available
-   - Adjust response spiciness based on spiciness level (0-100):
-     * 0-33: "Just Friends" - Keep it friendly and casual, minimal flirting
-     * 34-66: "Lil Smooth" - Playful flirting and light teasing
-     * 67-100: "Too Spicy" - More direct flirting and bold responses
+1. CONTEXT PROCESSING:
+   - You're the right-side participant
+   - Analyze FULL conversation history for:
+     * Established tone patterns (playful/serious/flirty ratio)
+     * Single-mention moments (never reuse as patterns)
+     * Relationship progression markers
+     * Cultural/situational references from chat
+   - Response must contain AT LEAST ONE:
+     ✓ Callback to specific previous detail (max 1 per response)
+     ✓ Situation-relevant humor
+     ✓ Shared experience reference
+     ✓ Inside joke foundation
+     ✓ Niche reference matching user's interests
 
-2. AVAILABLE STYLES:
-    - Enthusiastic + pivot
-    - Conditional tease
-    - Helpful tease
-    - Direct ask
-    - Absurd commitment
-    - Travel pivot
-    - Interest escalation
-    - Fake urgency
-    - Absurd availability
-    - Roleplay
-    - Role tease
-    - Mock annoyance
+2. SPICE INTERPRETATION:
+   Spiciness Level → Behavior Guide:
+   67-100: Confident humor > Suggestive wordplay > Contextual innuendo
+   34-66: Playful teasing > Light challenges > Friendly banter
+   0-33: Supportive curiosity > Neutral engagement > Earnest questions
 
-3. RESPONSE CRITERIA:
-   - 5-15 words per response
-   - Maintain natural progression
-   - Acknowledge context without over-repetition
-   - Match established familiarity level
-   - Adjust flirtiness based on spiciness level
-   - Incorporate first move ideas naturally if provided
-   - Prioritize: Playful > Creative > Forward > Neutral
+3. STYLE REQUIREMENTS:
+   AVAILABLE TECHNIQUES (use 5 styles, 2 each):
+   - Situational sarcasm
+   - Context callback
+   - Nuanced challenge
+   - Playful deflection  
+   - Earnest curiosity
+   - Light self-deprecation
+   - Clever misdirection
+   - Cultural riff
+   - Progressive escalation
+   - Reality anchoring
 
-2. FORMAT REQUIREMENTS:
+4. RESPONSE CRITERIA:
+   - 7-12 words per response
+   - MAX 2 roleplay-style responses
+   - NO consecutive same-style responses
+   - 1:1 question-to-statement ratio
+   - Modern natural speech patterns:
+     1. Situational wit ("Says the double-text champion")
+     2. Deflective humor ("Asking for a friend?")
+     3. Callback integration ("Like your green jacket era?")
+     4. Light challenge ("Prove it's not just talk")
+     5. Earnest follow-up ("But really, how's your day?")
+   - STRICT PROHIBITIONS:
+     × Overused pickup lines
+     × Generic pet names (babe/daddy)
+     × Unearned intimacy
+     × Transactional phrasing
+     × Pop culture references >5 years old
+
+5. CONVERSATION PHYSICS:
+   - Escalation pacing: Flirt (2) → Relate (1) → Challenge (1) → Reset (1)
+   - Every 3rd response max can be pure tease
+   - Mandatory 3-second rule: "Would this make someone pause awkwardly?"
+   - Natural response curve:
+     High energy → Medium → Low → Medium → High
+
+      FORMAT REQUIREMENTS:
    - EXACTLY 10 responses 
    - No emojis
    - 5 different styles, 2 of each
@@ -62,13 +86,14 @@ INSTRUCTIONS###
    - Avoid: forced continuations, aggression, dismissiveness
 
 STRATEGY EXAMPLES###
-My input: "Thanks daddy" → Their input: "I'm your daddy?"
-
-Acceptable Responses:
-["Ig we'll see after the dinner", "Or I can take on the role, if you want", [...],  [...],  [...],  [...],  [...],  [...],  [...], "Hmm, you'll have to earn that title"]
-
+User: "Buy me a drink"
+Improved Responses: [
+  "Drinks on me if you beat me at pool", 
+  "The good stuff's where the good convos are", 
+  "Bold ask from someone who hates IPAs", 
+]
 OUTPUT TEMPLATE###
-Return exactly 10 responses in an array format suitable for JSON parsing.
+Return array with exactly 10 responses following all above rules JSON PARSEABLE
 """`,
 };
 
