@@ -400,29 +400,51 @@ export default function ResponsesPage() {
   const handleRegenerate = async () => {
     try {
       setIsGenerating(true);
+      setShowRegeneratePopup(false);
+      
+      // Get the current saved data to ensure we have the input
+      const savedData = JSON.parse(localStorage.getItem('current_responses') || '{}');
+      const inputMode = savedData.inputMode;
+      const currentLastFile = savedData.lastFile || lastFile;
+      const currentLastContext = savedData.lastContext || lastContext;
+      const currentLastText = savedData.lastText || lastText;
+      
+      console.log('Regenerating with:', {
+        inputMode,
+        hasFile: !!currentLastFile,
+        hasContext: !!currentLastContext,
+        hasText: !!currentLastText
+      });
+
       let newResponses: string[] = [];
       
       // Check if we're using text input or file input
-      if (lastContext && lastText) {
+      if (currentLastContext && currentLastText) {
         // Text input path
         newResponses = await analyzeScreenshot(
           null, // no file
-          mode,
+          mode || savedData.mode,
           isSignedIn,
-          lastContext,
-          lastText
+          currentLastContext,
+          currentLastText
         );
-      } else if (lastFile) {
-        // Existing file input path
-        const file = await base64ToFile(lastFile, 'screenshot.png');
+      } else if (currentLastFile) {
+        // File input path
+        const file = await base64ToFile(currentLastFile, 'screenshot.png');
         
         if (!file) {
-          throw new Error('No screenshot available for regeneration');
+          throw new Error('Failed to process the screenshot for regeneration');
         }
 
-        newResponses = await analyzeScreenshot(file, mode, isSignedIn, lastContext, lastText);
+        newResponses = await analyzeScreenshot(
+          file,
+          mode || savedData.mode,
+          isSignedIn,
+          currentLastContext || '',
+          currentLastText || ''
+        );
       } else {
-        throw new Error('No input available for regeneration');
+        throw new Error('No input available for regeneration - please return to home and try again');
       }
       
       if (!newResponses || !Array.isArray(newResponses) || newResponses.length === 0) {
@@ -434,17 +456,18 @@ export default function ResponsesPage() {
       setCurrentIndex(newResponses.length - 1);
       setKey(prevKey => prevKey + 1);
       
-      // Update localStorage with new responses
-      const savedData = {
+      // Make sure we preserve all the input data when saving
+      const updatedSavedData = {
         responses: newResponses,
         currentIndex: newResponses.length - 1,
-        mode,
-        lastFile: lastContext && lastText ? null : lastFile,
-        lastContext,
-        lastText,
-        inputMode: (lastContext && lastText) ? 'text' as const : 'screenshot' as const
+        mode: mode || savedData.mode,
+        lastFile: currentLastFile,
+        lastContext: currentLastContext,
+        lastText: currentLastText,
+        inputMode: inputMode || (currentLastContext && currentLastText ? 'text' : 'screenshot'),
+        requestId: savedData.requestId
       };
-      localStorage.setItem('current_responses', JSON.stringify(savedData));
+      localStorage.setItem('current_responses', JSON.stringify(updatedSavedData));
       
       // Update childRefs for new responses
       childRefs.current = Array(newResponses.length)
@@ -453,15 +476,14 @@ export default function ResponsesPage() {
         
     } catch (error) {
       console.error('Error regenerating responses:', error);
-      if (error instanceof Error && error.message === 'No input available for regeneration') {
-        alert('Failed to generate responses. returning Home');
+      if (error instanceof Error && error.message.includes('No input available')) {
+        alert('Failed to regenerate responses - please return to home and try again');
         router.push('/');
       } else {
         alert('Failed to generate responses. Please try again.');
       }
     } finally {
       setIsGenerating(false);
-      setShowRegeneratePopup(false);
     }
   };
 
