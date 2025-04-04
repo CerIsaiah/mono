@@ -74,7 +74,7 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
   });
 
   try {
-    const { credential } = req.body;
+    const { credential, anonymousData } = req.body;
     const requestIP = clientIP;
 
     if (!requestIP) {
@@ -99,10 +99,17 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
       timestamp: new Date().toISOString()
     });
 
-    // Get anonymous usage first
-    console.log('Fetching IP usage...');
-    const ipUsage = await getIPUsage(requestIP);
-    const anonymousSwipes = ipUsage.daily_usage;
+    // Get anonymous swipes from request or IP usage
+    console.log('Getting anonymous swipes...');
+    let anonymousSwipes = 0;
+    if (anonymousData?.dailySwipes) {
+      anonymousSwipes = anonymousData.dailySwipes;
+    } else {
+      const ipUsage = await getIPUsage(requestIP);
+      anonymousSwipes = ipUsage.daily_usage;
+    }
+
+    console.log('Anonymous swipes found:', anonymousSwipes);
 
     // Get or create user using centralized function
     console.log('Finding or creating user...');
@@ -117,24 +124,44 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
     if (anonymousSwipes > 0) {
       const supabase = getSupabaseClient();
       
+      console.log('Updating user usage with anonymous swipes:', {
+        currentDailyUsage: user.daily_usage,
+        anonymousSwipes,
+        newTotal: user.daily_usage + anonymousSwipes
+      });
+
       // First update the user's daily usage
-      await supabase
+      const { error: updateError } = await supabase
         .from('users')
         .update({ 
           daily_usage: user.daily_usage + anonymousSwipes,
           total_usage: user.total_usage + anonymousSwipes
         })
         .eq('email', email);
+
+      if (updateError) {
+        console.error('Error updating user usage:', updateError);
+      }
       
       // Then clear IP-based usage
-      await supabase
+      const { error: ipError } = await supabase
         .from('ip_usage')
         .update({ daily_usage: 0 })
         .eq('ip_address', requestIP);
+
+      if (ipError) {
+        console.error('Error clearing IP usage:', ipError);
+      }
         
       // Update the user object to reflect new usage
       user.daily_usage += anonymousSwipes;
       user.total_usage += anonymousSwipes;
+
+      console.log('Updated user usage:', {
+        email,
+        newDailyUsage: user.daily_usage,
+        newTotalUsage: user.total_usage
+      });
     }
     
     // Check if user is premium or in trial period

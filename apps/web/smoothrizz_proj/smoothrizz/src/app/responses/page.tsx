@@ -713,11 +713,15 @@ export default function ResponsesPage() {
       
       // Get anonymous data before signing in
       const anonymousResponses = JSON.parse(localStorage.getItem('anonymous_saved_responses') || '[]');
-      const anonymousUsage = JSON.parse(localStorage.getItem('smoothrizz_usage') || '{}');
+      
+      // Get current usage from backend for anonymous user
+      const usageResponse = await fetch(`${API_BASE_URL}/api/usage`);
+      const usageData = await usageResponse.json();
+      const anonymousSwipes = usageData.dailySwipes || 0;
       
       console.log('Migrating anonymous data:', {
         savedResponses: anonymousResponses.length,
-        dailySwipes: anonymousUsage.dailySwipes || 0
+        dailySwipes: anonymousSwipes
       });
       
       // Call the Google auth endpoint with anonymous data
@@ -730,7 +734,7 @@ export default function ResponsesPage() {
           credential: token,
           anonymousData: {
             savedResponses: anonymousResponses,
-            dailySwipes: anonymousUsage.dailySwipes || 0
+            dailySwipes: anonymousSwipes
           }
         })
       });
