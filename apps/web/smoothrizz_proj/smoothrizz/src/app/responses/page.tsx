@@ -76,7 +76,7 @@ function RegeneratePopup({ onRegenerate, onClose }: RegeneratePopupProps) {
         
         <h2 className="text-2xl font-bold mb-4">Generate New Responses</h2>
         <p className="mb-6">
-          Would you like to generate new responses?
+          Would you like to generate fresh responses?
         </p>
         
         <div className="space-y-3">
@@ -84,13 +84,7 @@ function RegeneratePopup({ onRegenerate, onClose }: RegeneratePopupProps) {
             onClick={onRegenerate}
             className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-3 rounded-lg hover:opacity-90 transition-opacity"
           >
-            Generate New Responses
-          </button>
-          <button
-            onClick={onClose}
-            className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Cancel
+            Generate Fresh Responses
           </button>
         </div>
       </div>
