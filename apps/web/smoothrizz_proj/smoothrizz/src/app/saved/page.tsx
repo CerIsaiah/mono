@@ -710,7 +710,7 @@ export default function SavedResponses() {
                             {subscriptionDetails.isCanceled 
                               ? `Access until ${new Date(subscriptionDetails.subscriptionEndsAt!).toLocaleDateString()}`
                               : <>
-                                  Next payment: ${new Date(subscriptionDetails.subscriptionEndsAt!).toLocaleDateString()} 
+                                  Next payment: {new Date(subscriptionDetails.subscriptionEndsAt!).toLocaleDateString()} 
                                   <span className="text-pink-400 ml-1">($4.99/month)</span>
                                 </>
                             }
