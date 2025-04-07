@@ -3,7 +3,6 @@ import { Poppins } from 'next/font/google'
 import { Analytics } from "@vercel/analytics/react"
 import './globals.css'
 import Script from 'next/script'
-import AnalyticsWrapper from './components/AnalyticsWrapper'
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -39,7 +38,7 @@ export default function RootLayout({ children }) {
       </head>
       <body className="font-poppins">
         {children}
-        <AnalyticsWrapper />
+       
       </body>
     </html>
   )
