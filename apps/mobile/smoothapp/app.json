@@ -8,10 +8,23 @@
     "scheme": "com.smoothrizz.app",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "516e82d4-ffbd-44b6-8673-653a5d453620"
+      }
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.smoothrizz.app",
-      "googleServicesFile": "GoogleService-Info.plist"
+      "googleServicesFile": "GoogleService-Info.plist",
+      "config": {
+        "googleSignIn": {
+          "reservedClientId": "com.googleusercontent.apps.776336590279-oe5g4kldq8hkc0bn052rs9k8f6eet900"
+        }
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,6 +41,16 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-firebase/app",
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -36,12 +59,6 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ],
-      [
-        "@react-native-google-signin/google-signin"
-      ],
-      [
-        "expo-auth-session"
       ]
     ],
     "experiments": {

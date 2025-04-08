@@ -35,9 +35,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
-    userInterfaceStyle: 'light',
+    userInterfaceStyle: 'automatic',
     splash: {
-      image: './assets/splash.png',
+      image: './assets/images/splash-icon.png',
       resizeMode: 'contain',
       backgroundColor: '#ffffff'
     },
@@ -46,27 +46,54 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.smoothrizz.app'
+      bundleIdentifier: 'com.smoothrizz.app',
+      googleServicesFile: './GoogleService-Info.plist',
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false
+      }
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: './assets/adaptive-icon.png',
+        foregroundImage: './assets/images/adaptive-icon.png',
         backgroundColor: '#ffffff'
       },
-      package: 'com.smoothrizz.app'
+      package: 'com.smoothrizz.app',
+      googleServicesFile: './google-services.json'
     },
     web: {
-      favicon: './assets/favicon.png'
+      favicon: './assets/images/favicon.png'
     },
     plugins: [
-      'expo-router'
+      'expo-router',
+      '@react-native-firebase/app',
+      '@react-native-google-signin/google-signin',
+      [
+        'expo-build-properties',
+        {
+          ios: {
+            useFrameworks: 'static'
+          }
+        }
+      ],
+      [
+        'expo-splash-screen',
+        {
+          image: './assets/images/splash-icon.png',
+          imageWidth: 200,
+          resizeMode: 'contain',
+          backgroundColor: '#ffffff'
+        }
+      ]
     ],
     scheme: 'com.smoothrizz.app',
     extra: {
       ...ENV,
       eas: {
-        projectId: process.env.EAS_PROJECT_ID
+        projectId: "516e82d4-ffbd-44b6-8673-653a5d453620",
       }
-    }
+    },
+    experiments: {
+      typedRoutes: true
+    },
   };
 }; 
