@@ -9,7 +9,6 @@ import {
   Alert,
   ScrollView,
   Modal,
-  Button,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Swiper, type SwiperCardRefType } from 'rn-swiper-list';
@@ -75,107 +74,6 @@ const LoadingModal = ({ visible }: { visible: boolean }) => (
   </Modal>
 );
 
-// Regenerate Popup Component (similar to web)
-const RegeneratePopup = (
-    { visible, onRegenerate, onClose }: 
-    { visible: boolean, onRegenerate: () => void, onClose: () => void }
-) => (
-  <Modal
-    transparent={true}
-    animationType="fade"
-    visible={visible}
-    onRequestClose={onClose} // Allow closing with back button on Android
-  >
-    <View style={styles.popupOverlay}>
-      <View style={styles.popupContainer}>
-        <TouchableOpacity style={styles.popupCloseButton} onPress={onClose}>
-            <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-        </TouchableOpacity>
-        <Text style={styles.popupTitle}>Generate New Responses</Text>
-        <Text style={styles.popupMessage}>
-          Would you like to generate fresh responses based on the same input?
-        </Text>
-        <TouchableOpacity style={styles.popupActionButton} onPress={onRegenerate}>
-          <Text style={styles.popupActionButtonText}>Generate Fresh Responses</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </Modal>
-);
-
-const retryOperation = async <T>(
-    operation: () => Promise<T>,
-    shouldRetry: (error: any) => boolean,
-    retries = 3,
-    delayMs = 1500 // Increased delay slightly
-): Promise<T> => {
-    let lastError: any;
-    for (let i = 0; i < retries; i++) {
-        try {
-            console.log(`Performing operation (Attempt ${i + 1}/${retries})...`);
-            return await operation();
-        } catch (error) {
-            lastError = error;
-            if (shouldRetry(error) && i < retries - 1) {
-                console.log(`Operation failed with retryable error, retrying in ${delayMs}ms...`, error);
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-            } else {
-                console.log(`Operation failed permanently or retries exhausted.`, error);
-                throw lastError; // Throw last error if not retryable or retries exhausted
-            }
-        }
-    }
-    throw lastError; // Should be unreachable
-};
-
-// Helper function to verify user record on the backend
-const verifyUserRecord = async (firebaseUser: User): Promise<boolean> => {
-    if (!firebaseUser) {
-        console.error("Verification attempted without a user.");
-        return false;
-    }
-    console.log(`Verifying backend record for user: ${firebaseUser.email}`);
-    try {
-      const idToken = await firebaseUser.getIdToken(true); // Force refresh token
-
-      const verifyCall = async () => {
-        const response = await fetch(`${API_BASE_URL}/auth/verify`, { // Use your verification endpoint
-          method: 'POST', // Or GET, adjust as needed
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-          },
-           // body: JSON.stringify({ email: firebaseUser.email }) // Add if needed
-        });
-
-        console.log(`Backend verification response status: ${response.status} for ${firebaseUser.email}`);
-        if (!response.ok) {
-          if (response.status === 404 || response.status >= 500) { // Treat 5xx as potentially temporary
-             throw new Error(`User record not ready (Status ${response.status})`);
-          }
-          const errorData = await response.text();
-          throw new Error(`Verification failed: ${response.status} - ${errorData}`);
-        }
-        return true;
-      };
-
-      const shouldRetryVerification = (error: any): boolean => {
-          return error instanceof Error && (error.message.includes('User record not ready') || error.message.includes('404') || error.message.includes('500'));
-      };
-
-      await retryOperation(verifyCall, shouldRetryVerification, 5, 2000); // Increased retries/delay
-
-      console.log(`Backend record verified for user: ${firebaseUser.email}`);
-      return true;
-
-    } catch (error) {
-      console.error(`Backend verification failed for user ${firebaseUser.email} after retries:`, error);
-      // Maybe alert user or log critical error
-       Alert.alert("Account Sync Issue", "There was a problem syncing your account. Please try restarting the app or contact support if the issue persists.");
-      return false;
-    }
-  };
-
 export default function SwipesPage() {
   const router = useRouter();
   const params = useLocalSearchParams<{ imageUri: string; context: string }>();
@@ -186,7 +84,7 @@ export default function SwipesPage() {
   const [isGenerating, setIsGenerating] = useState<boolean>(false); // Regeneration loading
   const [error, setError] = useState<string | null>(null);
   const swiperRef = useRef<SwiperCardRefType>(null);
-  const { user, signOut, isLoading: isAuthLoading } = useAuth(); // Get user from context
+  const { user } = useAuth(); // Get user from context
   const [isPremium, setIsPremium] = useState<boolean>(false); // Manage premium status locally
   const [learningPercentage, setLearningPercentage] = useState<number>(MIN_LEARNING_PERCENTAGE);
   const [canSwipe, setCanSwipe] = useState<boolean>(true);
@@ -194,9 +92,6 @@ export default function SwipesPage() {
   const [currentIndex, setCurrentIndex] = useState<number>(0); // Track current card index for swiper
   const [initialBase64Data, setInitialBase64Data] = useState<string | null>(null); // Store initial base64
   const [swiperKey, setSwiperKey] = useState<number>(0); // Key for forcing swiper remount
-  const [showRegeneratePopup, setShowRegeneratePopup] = useState<boolean>(false); // State for popup visibility
-  const [isVerified, setIsVerified] = useState(false); // New state for verification status
-  const [initialLoading, setInitialLoading] = useState(true); // Tracks initial load + verification
 
   // Moved fetchLearningPercentage definition before its usage
   const fetchLearningPercentage = useCallback(async () => {
@@ -232,11 +127,17 @@ export default function SwipesPage() {
         return;
     }
     try {
-       // Fetch user status (including premium and usage) from a dedicated endpoint or auth verify
-       // Example using a hypothetical /api/user-status endpoint
-       const statusResponse = await fetch(`${API_BASE_URL}/api/user-status`, { // Adjust endpoint as needed
-           headers: { 'x-user-email': user.email }
+       // Fetch user status using the /auth/verify endpoint via POST
+       const statusResponse = await fetch(`${API_BASE_URL}/auth/verify`, {
+           method: 'POST',
+           headers: {
+             'Content-Type': 'application/json',
+             // Consider adding Authorization header with Firebase token if needed by backend
+             // 'Authorization': `Bearer ${await user.getIdToken()}`
+           },
+           body: JSON.stringify({ email: user.email }),
        });
+
        if (statusResponse.ok) {
            const statusData = await statusResponse.json();
            setIsPremium(statusData.isPremium || false);
@@ -332,76 +233,6 @@ export default function SwipesPage() {
     prepareAndFetch();
     fetchInitialData(); // Fetch usage, premium status, and learning percentage
   }, [imageUri, initialContext, fetchInitialData, fetchResponses]); // Add fetchResponses dependency
-
-  // Modified useEffect for initial data loading
-  useEffect(() => {
-    const loadInitialData = async () => {
-      if (user && !isVerified) { // Only run if user exists but verification hasn't succeeded yet
-        setInitialLoading(true); // Start initial loading indicator
-        console.log("User authenticated, starting backend verification...");
-        const verified = await verifyUserRecord(user);
-        setIsVerified(verified); // Store verification result
-
-        if (verified) {
-          console.log("Verification successful, fetching user data...");
-          // Now fetch subscription status and other data
-          try {
-            // --- Fetch Subscription Status (Example) ---
-            // Replace with your actual fetch logic
-            const token = await user.getIdToken();
-            const statusResponse = await fetch(`${API_BASE_URL}/api/subscription/status`, { // Replace with your endpoint
-                 headers: {
-                    'Authorization': `Bearer ${token}`
-                 }
-            });
-             if (!statusResponse.ok) {
-                 throw new Error(`Failed to fetch subscription status (${statusResponse.status})`);
-             }
-             const statusData = await statusResponse.json();
-             setIsPremium(statusData.status === 'premium' || statusData.status === 'trial');
-             console.log('Subscription status fetched:', statusData.status);
-
-            // --- Fetch Usage Count (Example) ---
-            // Replace with your actual fetch logic
-             const usageResponse = await fetch(`${API_BASE_URL}/api/usage`, { // Replace with your endpoint
-                 headers: {
-                    'Authorization': `Bearer ${token}`
-                 }
-             });
-             if (!usageResponse.ok) {
-                 throw new Error(`Failed to fetch usage count (${usageResponse.status})`);
-             }
-             const usageData = await usageResponse.json();
-             setUsageCount(usageData.dailySwipes || 0); // Adjust based on your API response
-             console.log('Usage count fetched:', usageData.dailySwipes);
-
-             setError(null); // Clear any previous errors
-          } catch (fetchError: any) {
-              console.error("Error fetching user data after verification:", fetchError);
-              setError(`Failed to load user data: ${fetchError.message}`);
-              // Consider how to handle this failure - maybe allow limited functionality?
-          } finally {
-              setInitialLoading(false); // Stop loading indicator once verified & data fetched (or failed)
-          }
-        } else {
-            // Verification failed after retries
-            setError("Failed to verify account with backend. Please restart the app.");
-            setInitialLoading(false); // Stop loading indicator
-        }
-      } else if (!user) {
-         console.log("No user found, skipping verification and data fetch.");
-         setInitialLoading(false); // No user, so loading is done
-         setIsVerified(false); // Reset verification status if user logs out
-      } else {
-         // User exists and is already verified, no need to reload data unless triggered otherwise
-         setInitialLoading(false);
-      }
-    };
-
-    loadInitialData();
-    // Depend on `user` to re-run when auth state changes.
-    // `isVerified` dependency prevents re-running verification if it already succeeded.
-  }, [user, isVerified]);
 
   const trackSwipe = async (direction: 'left' | 'right'): Promise<boolean> => {
     if (!user?.email) {
@@ -548,15 +379,13 @@ export default function SwipesPage() {
 
   const handleSwipedAll = () => {
     console.log('Swiped all cards!');
-    // Don't set error, show the regenerate popup instead
-    // setError("You've seen all responses for this image. Regenerate or go back.");
-    setCanSwipe(false); // Stop further swiping
-    setShowRegeneratePopup(true); // Show the popup
+    setError("You've seen all responses for this image. Regenerate or go back."); // Inform user
+    // Ensure swiping stops if not already stopped
+    setCanSwipe(false);
   };
 
   // Regenerate function
   const handleRegenerate = async () => {
-      setShowRegeneratePopup(false); // Close popup first
       if (!initialBase64Data || !initialContext) {
           Alert.alert('Error', 'Cannot regenerate without initial image and context.');
           return;
@@ -564,12 +393,15 @@ export default function SwipesPage() {
       if (isGenerating || isLoading) {
           return; // Prevent multiple calls
       }
-      const canRegenerate = isPremium || usageCount < FREE_USER_DAILY_LIMIT;
+      // Optional: Check swipe limits again before regenerating?
+      // Note: Regeneration might have its own limits or costs, handle accordingly.
+      // For now, assume regeneration is allowed if user could initially fetch.
+      const canRegenerate = isPremium || usageCount < FREE_USER_DAILY_LIMIT; // Example limit check
       if (!canRegenerate) {
           Alert.alert(
-              'Limit Reached',
-              isPremium
-                  ? 'An error occurred. Please try again later.'
+              'Limit Reached', 
+              isPremium 
+                  ? 'An error occurred. Please try again later.' // Premium shouldn't hit limit
                   : 'You have reached your daily limit and cannot regenerate more responses today. Upgrade for unlimited generations!'
            );
           return;
@@ -577,8 +409,10 @@ export default function SwipesPage() {
 
       console.log('Regenerating responses...');
       await fetchResponses(initialBase64Data, initialContext);
+      // Force remount of Swiper component by updating its key
       setSwiperKey(prevKey => prevKey + 1);
-      setCurrentIndex(responses.length > 0 ? responses.length - 1 : 0);
+      setCurrentIndex(responses.length > 0 ? responses.length - 1 : 0); // Reset index state too
+      // Reset error state if regeneration is successful
       setError(null);
   };
 
@@ -587,15 +421,13 @@ export default function SwipesPage() {
   }, []);
 
   // Loading state for initial fetch
-  if (isAuthLoading || initialLoading) {
-     return (
-         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-             <ActivityIndicator size="large" color="#db2777" />
-             <Text style={{ marginTop: 10, color: '#6b7280' }}>
-                 {isAuthLoading ? "Authenticating..." : "Syncing account..."}
-             </Text>
-         </View>
-     );
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.centeredContainer}>
+        <ActivityIndicator size="large" color={COLORS.primaryPink} />
+        <Text style={styles.loadingText}>Generating your Rizzponses...</Text>
+      </SafeAreaView>
+    );
   }
 
   // Error state (now handles initial load error and swiped all)
@@ -619,13 +451,6 @@ export default function SwipesPage() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
         <LoadingModal visible={isGenerating} />
-
-        {/* Regenerate Popup Modal */}
-        <RegeneratePopup
-            visible={showRegeneratePopup}
-            onRegenerate={handleRegenerate}
-            onClose={() => setShowRegeneratePopup(false)}
-        />
 
         {/* Header Area */}
         <View style={styles.headerContainer}>
@@ -695,10 +520,8 @@ export default function SwipesPage() {
            // Show message if no responses and not loading/generating
            !isLoading && !isGenerating && (
                 <View style={styles.centeredContainer}>
-                    {/* Display error only if it's a real error, not the 'swiped all' message */}
-                    {error && <Text style={styles.infoText}>{error}</Text>}
-                    {!error && <Text style={styles.infoText}>No responses generated.</Text>}
-                     {/* Regenerate button might be less necessary here if popup handles it */}
+                    <Text style={styles.infoText}>{error || 'No responses generated.'}</Text>
+                     {/* Show regenerate button here too if applicable */}
                      {initialBase64Data && initialContext && (
                          <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate} disabled={isGenerating}>
                              <Ionicons name="refresh" size={18} color={COLORS.white} />
@@ -1016,60 +839,4 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
      },
-  // Popup Styles (similar to web version)
-  popupOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 20, // Padding around the popup content
-  },
-  popupContainer: {
-      backgroundColor: COLORS.white,
-      borderRadius: 12,
-      padding: 25,
-      paddingTop: 40, // Extra padding at the top for close button positioning
-      width: '100%',
-      maxWidth: 350, // Limit maximum width
-      alignItems: 'center',
-      position: 'relative',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 6,
-      elevation: 5,
-  },
-  popupCloseButton: {
-      position: 'absolute',
-      top: 10,
-      right: 10,
-      padding: 5, // Tappable area
-  },
-  popupTitle: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      color: COLORS.textPrimary,
-      marginBottom: 15,
-      textAlign: 'center',
-  },
-  popupMessage: {
-      fontSize: 16,
-      color: COLORS.textSecondary,
-      textAlign: 'center',
-      marginBottom: 25,
-      lineHeight: 22, // Improve readability
-  },
-  popupActionButton: {
-      backgroundColor: COLORS.primaryPink,
-      paddingVertical: 12,
-      paddingHorizontal: 30,
-      borderRadius: 25,
-      width: '100%', // Make button full width of popup container
-      alignItems: 'center',
-  },
-  popupActionButtonText: {
-      color: COLORS.white,
-      fontSize: 16,
-      fontWeight: 'bold',
-  },
 });

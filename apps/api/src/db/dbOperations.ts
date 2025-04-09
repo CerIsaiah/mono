@@ -239,8 +239,10 @@ export async function findOrCreateUser(
   anonymousSwipes: number = 0
 ): Promise<User> {
   const supabase = getSupabaseClient();
+  const normalizedEmail = email.toLowerCase().trim();
+
   try {
-    // First try to find the existing user
+    // First try to find the existing user using normalized email
     let { data: existingUser } = await supabase
       .from('users')
       .select(`
@@ -254,10 +256,11 @@ export async function findOrCreateUser(
         is_trial,
         trial_end_date
       `)
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .single();
 
     if (existingUser) {
+      logger.info('findOrCreateUser: Found existing user', { email: normalizedEmail });
       // If user exists, add anonymous swipes to their daily usage
       const newDailyUsage = (existingUser.daily_usage || 0) + anonymousSwipes;
       const newTotalUsage = (existingUser.total_usage || 0) + anonymousSwipes;
@@ -269,7 +272,7 @@ export async function findOrCreateUser(
           total_usage: newTotalUsage,
           last_used: new Date().toISOString()
         })
-        .eq('email', email)
+        .eq('email', normalizedEmail)
         .select()
         .single();
 
@@ -277,12 +280,13 @@ export async function findOrCreateUser(
       return updatedUser as User;
     }
 
-    // If user doesn't exist, create new user with anonymous swipes
+    // If user doesn't exist, create new user with normalized email
+    logger.info('findOrCreateUser: Creating new user', { email: normalizedEmail });
     const { data: newUser, error } = await supabase
       .from('users')
       .insert([
         {
-          email,
+          email: normalizedEmail,
           name,
           picture,
           daily_usage: anonymousSwipes,
@@ -298,10 +302,10 @@ export async function findOrCreateUser(
       .single();
 
     if (error) {
-      logger.error('Error in findOrCreateUser', {
+      logger.error('Error inserting new user in findOrCreateUser', {
         error: error.message,
         stack: error.stack,
-        email,
+        email: normalizedEmail,
         name
       });
       throw error;
@@ -441,73 +445,60 @@ export async function checkAndResetUsage(
 
 export async function incrementUsage(
   identifier: string, 
-  isEmail: boolean = false
-): Promise<UsageLimitsResponse> {
+  isEmail: boolean
+): Promise<{ dailySwipes: number, error?: string }> {
   const supabase = getSupabaseClient();
-  
+  const now = new Date().toISOString();
+
   try {
-    // Check and reset usage first
     await checkAndResetUsage(identifier, isEmail);
-    
-    // Then check limits
-    const limitCheck = await checkUsageLimits(identifier, isEmail);
-    if (!limitCheck.canSwipe) {
-      return limitCheck;
-    }
-    
-    const now = new Date().toISOString();
-    const today = new Date(getCurrentPSTTime()).toISOString().split('T')[0];
-    
+
     if (isEmail) {
-      const { data: currentUser, error: fetchError } = await supabase
-        .from('users')
-        .select('daily_usage, total_usage, daily_usage_history')
-        .eq('email', identifier)
-        .single();
+      const { data: newDailyUsage, error: rpcError } = await supabase
+        .rpc('increment_user_swipe_usage', { user_email: identifier });
 
-      if (fetchError) throw fetchError;
+      if (rpcError) {
+        logger.error('RPC increment_user_swipe_usage failed', { 
+          error: rpcError, 
+          email: identifier 
+        });
+        if (rpcError.code === 'PGRST116' || rpcError.message.includes('not found')) { 
+             return { dailySwipes: 0, error: 'User not found during increment' };
+        }
+        throw rpcError;
+      }
 
-      const currentHistory = currentUser?.daily_usage_history || {};
-      currentHistory[today] = (currentHistory[today] || 0) + 1;
+      if (newDailyUsage === null || newDailyUsage === undefined) {
+          logger.error('RPC increment_user_swipe_usage returned null/undefined', { email: identifier });
+          return { dailySwipes: 0, error: 'Failed to get updated swipe count.' };
+      }
+      
+      logger.info('Successfully incremented user usage via RPC', { email: identifier, newDailyUsage });
+      return { dailySwipes: newDailyUsage };
 
-      const { data: updatedUser, error: updateError } = await supabase
-        .from('users')
-        .update({
-          daily_usage: (currentUser?.daily_usage || 0) + 1,
-          total_usage: (currentUser?.total_usage || 0) + 1,
-          daily_usage_history: currentHistory,
-          last_used: now
-        })
-        .eq('email', identifier)
-        .select()
-        .single();
-        
-      if (updateError) throw updateError;
-
-      return { ...limitCheck, dailySwipes: updatedUser.daily_usage };
     } else {
-      // Handle IP-based increment
       const { data: ipData, error: getError } = await supabase
         .from('ip_usage')
         .select('daily_usage, total_usage')
         .eq('ip_address', identifier)
         .single();
-        
+
       if (getError) {
         if (getError.code === 'PGRST116') {
-          const { data, error } = await supabase
+          const { error } = await supabase
             .from('ip_usage')
-            .upsert({
-              ip_address: identifier,
-              daily_usage: 1,
-              total_usage: 1,
+            .insert({ 
+              ip_address: identifier, 
+              daily_usage: 1, 
+              total_usage: 1, 
               last_used: now,
-              last_reset: today
+              last_reset: now
             })
             .select();
             
           if (error) throw error;
-          return { ...limitCheck, dailySwipes: 1 };
+          logger.info('Created and incremented IP usage', { ip: identifier });
+          return { dailySwipes: 1 }; 
         }
         throw getError;
       }
@@ -525,7 +516,8 @@ export async function incrementUsage(
         .eq('ip_address', identifier);
         
       if (updateError) throw updateError;
-      return { ...limitCheck, dailySwipes: newDailyUsage };
+      logger.info('Successfully incremented IP usage', { ip: identifier, newDailyUsage });
+      return { dailySwipes: newDailyUsage };
     }
   } catch (error: any) {
     logger.error('Error incrementing usage', {
@@ -534,7 +526,7 @@ export async function incrementUsage(
       identifier,
       isEmail
     });
-    throw error;
+    return { dailySwipes: 0, error: error.message || 'Failed to increment usage' }; 
   }
 }
 
