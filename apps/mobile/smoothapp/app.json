@@ -16,12 +16,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.smoothrizz.app",
-      "googleServicesFile": "GoogleService-Info.plist",
-      "config": {
-        "googleSignIn": {
-          "reservedClientId": "com.googleusercontent.apps.776336590279-oe5g4kldq8hkc0bn052rs9k8f6eet900"
-        }
-      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -31,8 +25,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.smoothrizz.app",
-      "googleServicesFile": "google-services.json"
+      "package": "com.smoothrizz.app"
     },
     "web": {
       "bundler": "metro",
@@ -42,7 +35,7 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
-      "@react-native-google-signin/google-signin",
+      "expo-apple-authentication",
       [
         "expo-build-properties",
         {

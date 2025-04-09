@@ -20,7 +20,7 @@ export default function RootLayout({ children }) {
     <html lang="en" className={`${poppins.variable}`}>
       <head>
         <script src="https://accounts.google.com/gsi/client"></script>
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+       
         {/* Google Analytics */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-FD93L95WFQ"

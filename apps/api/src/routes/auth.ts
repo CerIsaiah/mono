@@ -299,7 +299,126 @@ router.post('/verify', async (req: Request, res: Response) => {
   }
 });
 
+// New handler for syncing Firebase user data
+const handleSyncFirebaseUser: RequestHandler = async (req, res) => {
+  const { email, firebaseUid, displayName } = req.body;
+
+  logger.info('Received request to sync Firebase user', { email, firebaseUid, displayName });
+
+  if (!email || !firebaseUid) {
+    logger.warn('Missing email or firebaseUid for sync request', { body: req.body });
+    return res.status(400).json({ error: 'Email and Firebase UID are required for sync' });
+  }
+
+  try {
+    // Call findOrCreateUser to ensure the user exists in the database
+    // We pass email, displayName (as name), null for picture (can be updated later if needed),
+    // and 0 for anonymousSwipes as this isn't relevant here.
+    const user = await findOrCreateUser(email, displayName || null, null, 0);
+
+    logger.info('User synced/found successfully via sync endpoint', { email: user.email, userId: user.id });
+
+    // Respond with success and potentially the user object (optional)
+    return res.status(200).json({ message: 'User synced successfully', userId: user.id });
+
+  } catch (error) {
+    logger.error('Error syncing Firebase user:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      email,
+      firebaseUid
+    });
+    return res.status(500).json({ 
+      error: 'Failed to sync user: ' + (error instanceof Error ? error.message : 'Unknown error') 
+    });
+  }
+};
+
 router.get('/google-client-id', getGoogleClientId);
 router.post('/google', handleGoogleAuth);
+router.post('/signout', async (req: Request, res: Response) => {
+  try {
+    logger.info('User signing out');
+    // Since we don't need to check the database state, just return success
+    res.json({ success: true, message: 'Signed out successfully' });
+  } catch (error) {
+    logger.error('Error during sign out:', error);
+    // Even if there's an error, return success to ensure the user can sign out
+    res.json({ success: true, message: 'Signed out successfully' });
+  }
+});
+
+router.post('/verify', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    console.log('Verifying session for:', { email });
+
+    // Get user from database
+    const supabase = getSupabaseClient();
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (error || !user) {
+      console.log('User not found or error:', { error });
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    // Check if user is premium or in trial period
+    const isPremium = user.subscription_status === 'active' && user.subscription_type === 'premium';
+    const isTrialActive = Boolean(user.is_trial && 
+      user.trial_end_date && 
+      new Date(user.trial_end_date) > new Date());
+    
+    console.log('Session verification - User status:', {
+      email: user.email,
+      isPremium,
+      isTrialActive,
+      subscriptionStatus: user.subscription_status,
+      subscriptionType: user.subscription_type,
+      timestamp: new Date().toISOString()
+    });
+
+    const response: GoogleAuthResponse = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name || undefined,
+        avatar_url: user.picture || undefined,
+      },
+      dailySwipes: user.daily_usage,
+      totalSwipes: user.total_usage,
+      isPremium: isPremium || isTrialActive,
+      isTrial: isTrialActive,
+      ...(isTrialActive && user.trial_end_date && {
+        trialEndsAt: new Date(user.trial_end_date)
+      })
+    };
+
+    console.log('Session verification successful');
+    return res.json(response);
+
+  } catch (error) {
+    console.error('Session verification error:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+    return res.status(500).json({ 
+      error: 'Session verification failed: ' + (error as Error).message 
+    });
+  }
+});
+
+// Add the new route
+router.post('/sync-firebase-user', handleSyncFirebaseUser);
 
 export default router;
