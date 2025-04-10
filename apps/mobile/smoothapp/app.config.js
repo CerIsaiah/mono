@@ -1,6 +1,10 @@
-import { ExpoConfig, ConfigContext } from 'expo/config';
+// @ts-check
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+/**
+ * @param {import('expo/config').ConfigContext} configContext
+ * @returns {import('expo/config').ExpoConfig}
+ */
+module.exports = ({ config }) => {
   // Load environment variables
   const ENV = {
     EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -32,12 +36,18 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ANDROID_CLIENT_ID: ENV.ANDROID_CLIENT_ID ? '✓ present' : '✗ missing'
   });
 
-  return {
+  // Construct the Google Reversed Client ID scheme, handling potential undefined values
+  const googleReversedClientIdScheme = ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID
+    ? `com.googleusercontent.apps.${ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID.split(".").pop()}`
+    : undefined; // Explicitly set to undefined if missing
+
+  /** @type {import('expo/config').ExpoConfig} */
+  const expoConfig = {
     ...config,
     name: 'SmoothRizz',
     slug: 'smoothrizz',
     version: '1.0.0',
-    orientation: 'portrait',
+    orientation: 'portrait', // Explicitly set as allowed value
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     splash: {
@@ -49,7 +59,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       '**/*'
     ],
     ios: {
+      ...(config.ios ?? {}), // Merge with existing ios config or default to empty obj
       infoPlist: {
+        ...(config.ios?.infoPlist ?? {}), // Merge with existing infoPlist
         GOOGLE_SIGN_IN_CLIENT_ID: ENV.IOS_GOOGLE_SIGN_IN_CLIENT_ID,
         SKAdNetworkItems: [{ SKAdNetworkIdentifier: "cstr6suwn9.skadnetwork" }],
         GOOGLE_APP_ID: ENV.IOS_GOOGLE_APP_ID,
@@ -57,46 +69,51 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         CFBundleURLTypes: [
           {
             CFBundleURLSchemes: [
-              `com.googleusercontent.apps.${(ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID || '').split(".").pop()}`,
+              googleReversedClientIdScheme,
               'com.smoothrizz.app',
-              ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID || ''
-            ],
+              ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID
+            ].filter(/** @returns {scheme is string} */ (scheme) => !!scheme), // Use filter(Boolean) with type predicate
           },
+          // Add other existing URL types from config if necessary
+          ...(config.ios?.infoPlist?.CFBundleURLTypes?.filter(t => t !== undefined) ?? []),
         ],
       },
       entitlements: {
+        ...(config.ios?.entitlements ?? {}),
         "com.apple.developer.applesignin": ["Default"],
       },
       config: {
+        ...(config.ios?.config ?? {}),
         usesNonExemptEncryption: false,
       },
       bundleIdentifier: "com.smoothrizz.app",
-      googleServicesFile: './GoogleService-Info.plist',
-      buildNumber: '1.0.0',
+      googleServicesFile: process.env.GOOGLE_SERVICES_INFO_PLIST_PATH || './GoogleService-Info.plist', // Allow overriding path via env
       supportsTablet: true,
     },
     android: {
+      ...(config.android ?? {}),
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
         backgroundColor: '#ffffff'
       },
       package: 'com.smoothrizz.app',
-      googleServicesFile: './google-services.json'
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON_PATH || './google-services.json'
     },
     web: {
+      ...(config.web ?? {}),
       favicon: './assets/images/favicon.png'
     },
     plugins: [
       'expo-router',
-      '@react-native-firebase/app',
-      '@react-native-google-signin/google-signin',
-      'expo-in-app-purchases',
+      // '@react-native-firebase/app',
+      // '@react-native-google-signin/google-signin',
+      // 'expo-in-app-purchases',
       [
         'expo-build-properties',
         {
           ios: {
             useFrameworks: 'static',
-            deploymentTarget: "13.0"
+            deploymentTarget: "15.1"
           }
         }
       ],
@@ -108,17 +125,23 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           resizeMode: 'contain',
           backgroundColor: '#ffffff'
         }
-      ]
+      ],
+      ...(config.plugins ?? []).filter(p => p !== undefined) // Merge existing plugins
     ],
     scheme: 'com.smoothrizz.app',
     extra: {
+      ...(config.extra ?? {}),
       ...ENV,
       eas: {
+        ...(config.extra?.eas ?? {}),
         projectId: "516e82d4-ffbd-44b6-8673-653a5d453620",
       }
     },
     experiments: {
+      ...(config.experiments ?? {}),
       typedRoutes: true
     },
   };
+
+  return expoConfig;
 }; 
