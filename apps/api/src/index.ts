@@ -10,6 +10,7 @@ import learningPercentageRouter from './routes/learning-percentage';
 import checkoutRouter from './routes/checkout';
 import webhooksRouter from './routes/webhooks';
 import cancelSubscriptionRouter from './routes/cancelSubscription';
+import userActionsRouter from './routes/userActions';
 import { logger } from './utils/logger';
 
 process.on('uncaughtException', (error) => {
@@ -118,6 +119,7 @@ app.use('/api/learning-percentage', learningPercentageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/cancelSubscription', cancelSubscriptionRouter);
+app.use('/api', userActionsRouter);
 
 logger.info('Routes mounted', {
   routes: [

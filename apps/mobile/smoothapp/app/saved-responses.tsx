@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../src/context/AuthContext';
 
 // Define API Base URL
@@ -121,11 +122,54 @@ export default function SavedResponsesScreen() {
     }
   };
 
-  const copyToClipboard = (text: string, id: string) => {
+  const copyToClipboard = async (text: string, id: string) => {
+    if (!user?.email) {
+        Alert.alert('Error', 'Cannot track copy action without user email.');
+        return;
+    }
     setCopyingId(id);
-   
-    Alert.alert('Copied!', 'Response copied to clipboard.');
-    setTimeout(() => setCopyingId(null), 1500); // Reset icon after a short delay
+
+    try {
+        // Actual copy to clipboard
+        await Clipboard.setStringAsync(text);
+
+        // --- Notify backend ---
+        // Assuming a new endpoint: POST /api/increment-copy-count
+        // This endpoint needs to be created on your backend.
+        const trackResponse = await fetch(`${API_BASE_URL}/api/increment-copy-count`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json', // Optional, depends on backend
+                'x-user-email': user.email,
+                'X-Client-Type': 'mobile',
+            },
+            // You might send the response ID or text if needed by the backend
+            // body: JSON.stringify({ responseId: id })
+        });
+
+        if (!trackResponse.ok) {
+            // Don't block the user, but log the error
+            console.warn(`Failed to track copy action: ${trackResponse.status}`);
+             // Optionally, check for 401 Unauthorized and redirect
+            if (trackResponse.status === 401) {
+               throw new Error('Unauthorized. Please log in again.');
+            }
+        }
+        // --- End backend notification ---
+
+
+        Alert.alert('Copied!', 'Response copied to clipboard.');
+        setTimeout(() => setCopyingId(null), 1500); // Reset icon after a short delay
+
+    } catch (error: any) {
+         console.error('Error during copy or tracking:', error);
+         Alert.alert('Error', error.message || 'Could not copy or track the action.');
+         if (error.message.includes('Unauthorized')) {
+            router.replace('/login');
+        }
+         // Still reset the icon even if tracking fails
+         setTimeout(() => setCopyingId(null), 1500);
+    }
   };
 
   const renderItem = ({ item }: { item: SavedResponse }) => (

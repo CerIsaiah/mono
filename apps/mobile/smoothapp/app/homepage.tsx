@@ -32,45 +32,87 @@ export default function HomeScreen() {
   const { signOut, isLoading: isAuthLoading, user } = useAuth(); // Get signOut function, isLoading state, and user info
   const [matchPercentage, setMatchPercentage] = useState(MIN_LEARNING_PERCENTAGE);
   const [isFetchingPercentage, setIsFetchingPercentage] = useState(true);
+  const [boostedConvos, setBoostedConvos] = useState<number>(0); // State for boosted convos
+  const [daysActive, setDaysActive] = useState<number>(0); // State for days active
+  const [isFetchingStats, setIsFetchingStats] = useState(true); // Loading state for stats
 
-  // Fetch Learning Percentage
+  // Fetch Learning Percentage and User Stats
   useEffect(() => {
-    const fetchLearningPercentage = async () => {
+    const fetchData = async () => {
       if (!user?.email) {
-        console.log("No user email found, skipping percentage fetch.");
+        console.log("No user email found, skipping data fetch.");
         setIsFetchingPercentage(false);
+        setIsFetchingStats(false); // Also set stats loading to false
         setMatchPercentage(MIN_LEARNING_PERCENTAGE); // Set default if no user
+        setBoostedConvos(0); // Default stats
+        setDaysActive(0); // Default stats
         return;
       }
 
       setIsFetchingPercentage(true);
+      setIsFetchingStats(true);
+
+      // Fetch Percentage
       try {
         const headers: Record<string, string> = {
           'x-user-email': user.email,
+          'X-Client-Type': 'mobile', // Added client type header
         };
 
         console.log(`Fetching learning percentage for ${user.email}...`);
-        const response = await fetch(`${API_BASE_URL}/api/learning-percentage`, { headers });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Error fetching learning percentage:', response.status, errorText);
-          throw new Error(`Failed to fetch learning percentage: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log("Learning percentage data received:", data);
-        setMatchPercentage(data.percentage || MIN_LEARNING_PERCENTAGE);
+        const percentageResponse = await fetch(`${API_BASE_URL}/api/learning-percentage`, { headers });
 
+        if (!percentageResponse.ok) {
+          const errorText = await percentageResponse.text();
+          console.error('Error fetching learning percentage:', percentageResponse.status, errorText);
+          // Don't throw here, let it fallback to default, but log error
+          setMatchPercentage(MIN_LEARNING_PERCENTAGE);
+        } else {
+          const percentageData = await percentageResponse.json();
+          console.log("Learning percentage data received:", percentageData);
+          setMatchPercentage(percentageData.percentage || MIN_LEARNING_PERCENTAGE);
+        }
       } catch (error) {
         console.error('Error fetching learning percentage:', error);
         setMatchPercentage(MIN_LEARNING_PERCENTAGE); // Set default on error
       } finally {
         setIsFetchingPercentage(false);
       }
+
+      // Fetch User Stats (Boosted Convos, Days Active)
+      try {
+         const headers: Record<string, string> = {
+           'x-user-email': user.email,
+           'X-Client-Type': 'mobile', // Added client type header
+         };
+         console.log(`Fetching user stats for ${user.email}...`);
+         // Assuming a new endpoint: GET /api/user-stats
+         // This endpoint needs to be created on your backend.
+         const statsResponse = await fetch(`${API_BASE_URL}/api/user-stats`, { headers });
+
+         if (!statsResponse.ok) {
+           const errorText = await statsResponse.text();
+           console.error('Error fetching user stats:', statsResponse.status, errorText);
+           // Fallback to 0 if stats fetch fails
+           setBoostedConvos(0);
+           setDaysActive(0);
+         } else {
+            const statsData = await statsResponse.json();
+            console.log("User stats data received:", statsData);
+            setBoostedConvos(statsData.boostedConvos || 0);
+            setDaysActive(statsData.daysActive || 0);
+         }
+      } catch (error) {
+         console.error('Error fetching user stats:', error);
+         // Fallback to 0 on error
+         setBoostedConvos(0);
+         setDaysActive(0);
+      } finally {
+          setIsFetchingStats(false);
+      }
     };
 
-    fetchLearningPercentage();
+    fetchData();
   }, [user?.email]); // Re-run effect if user email changes
 
   const handleUploadPress = () => {
@@ -130,15 +172,22 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Weekly SmoothRizz Score */}
+        {/* Weekly SmoothRizz Score - UPDATED */}
         <View style={styles.smoothRizzContainer}>
-           <View style={styles.scoreBubble}>
-             <Text style={styles.scoreText}>{weeklyStreak}🔥</Text>
-           </View>
-           <View style={styles.scoreBubble}>
-             <Text style={styles.scoreText}>{weeklyStars}⭐</Text>
-           </View>
-          <Text style={styles.smoothRizzText}>This Week's SmoothRizz</Text>
+          {isFetchingStats ? (
+            <ActivityIndicator size="small" color={COLORS.black} />
+          ) : (
+            <>
+              <View style={styles.scoreBubble}>
+                <Text style={styles.scoreText}>🔥</Text>
+              </View>
+              <Text style={styles.smoothRizzText}>{`${boostedConvos} Convos Boosted`}</Text>
+              <View style={[styles.scoreBubble, { marginLeft: 15 }]}> {/* Add margin */}
+                <Text style={styles.scoreText}>💡</Text>
+              </View>
+              <Text style={styles.smoothRizzText}>{`${daysActive} Days Active`}</Text>
+            </>
+          )}
         </View>
 
         {/* Action Buttons */}
@@ -340,7 +389,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500', // Slightly bolder
     color: COLORS.black,
-    marginLeft: 12, // Increased spacing
+    marginLeft: 6, // Adjust spacing
+    marginRight: 6, // Add spacing if needed between items
   },
   button: {
     width: '100%', // Take full width within padding

@@ -120,6 +120,29 @@ const handleGoogleAuth: RequestHandler<any, any, any, any, { ip: string }> = asy
       anonymousSwipes
     );
     
+    // ---- BEGIN LOGIN TIMESTAMP LOGGING ----
+    try {
+      const supabase = getSupabaseClient();
+      const { error: rpcError } = await supabase.rpc('append_login_timestamp', { user_email: email });
+      if (rpcError) {
+        // Log the error but don't fail the login process
+        logger.error('Failed to log login timestamp via RPC', {
+           email: email,
+           error: rpcError.message,
+           stack: rpcError.stack
+        });
+      } else {
+        logger.info('Successfully logged login timestamp', { email: email });
+      }
+    } catch (err: any) {
+        logger.error('Exception during login timestamp logging', {
+           email: email,
+           error: err.message,
+           stack: err.stack
+        });
+    }
+    // ---- END LOGIN TIMESTAMP LOGGING ----
+
     // Update user's daily usage to include anonymous swipes
     if (anonymousSwipes > 0) {
       const supabase = getSupabaseClient();
