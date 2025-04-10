@@ -49,7 +49,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       '**/*'
     ],
     ios: {
-      deploymentTarget: "13.0",
       infoPlist: {
         GOOGLE_SIGN_IN_CLIENT_ID: ENV.IOS_GOOGLE_SIGN_IN_CLIENT_ID,
         SKAdNetworkItems: [{ SKAdNetworkIdentifier: "cstr6suwn9.skadnetwork" }],
@@ -58,9 +57,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         CFBundleURLTypes: [
           {
             CFBundleURLSchemes: [
-              `com.googleusercontent.apps.${ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID.split(".").pop()}`,
+              `com.googleusercontent.apps.${(ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID || '').split(".").pop()}`,
               'com.smoothrizz.app',
-              ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID
+              ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID || ''
             ],
           },
         ],
@@ -96,7 +95,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'expo-build-properties',
         {
           ios: {
-            useFrameworks: 'static'
+            useFrameworks: 'static',
+            deploymentTarget: "13.0"
           }
         }
       ],
