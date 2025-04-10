@@ -303,6 +303,7 @@ export default function SwipesPage() {
   };
 
   const handleSwipe = async (index: number, direction: 'left' | 'right') => {
+      console.log(`handleSwipe triggered for index ${index}, direction ${direction}. Checking canSwipe state:`, canSwipe);
       if (!canSwipe) {
           console.log("Cannot swipe, limit reached or generation in progress.");
           // Optionally add visual feedback or reset the card position

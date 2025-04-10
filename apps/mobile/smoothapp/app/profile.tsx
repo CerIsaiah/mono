@@ -8,10 +8,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Linking, // For opening checkout/management URLs
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as InAppPurchases from 'expo-in-app-purchases';
 import { useAuth } from '../src/context/AuthContext';
 
 // Define API Base URL
@@ -33,6 +34,8 @@ const COLORS = {
   blue: '#2196F3',
 };
 
+const IAP_PRODUCT_ID_IOS = 'smoothrizz_unlimited_subscription'; // From your screenshot
+
 interface SubscriptionDetails {
   type: string | null;
   isTrialActive: boolean;
@@ -52,7 +55,10 @@ export default function ProfileScreen() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('free');
   const [subscriptionDetails, setSubscriptionDetails] = useState<SubscriptionDetails | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isProcessingSubscription, setIsProcessingSubscription] = useState(false);
+  const [isIapConnected, setIsIapConnected] = useState(false);
+  const [products, setProducts] = useState<InAppPurchases.IAPItemDetails[]>([]);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const fetchSubscriptionStatus = useCallback(async () => {
     if (!user?.email) {
@@ -110,90 +116,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCheckout = async () => {
-    if (!user?.email) return;
-    setIsProcessingSubscription(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/checkout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'mobile', // Add client type
-        },
-        body: JSON.stringify({ userEmail: user.email }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create checkout session');
-      }
-
-      if (data.url) {
-        // Open the checkout URL in the browser
-        const supported = await Linking.canOpenURL(data.url);
-        if (supported) {
-          await Linking.openURL(data.url);
-        } else {
-          Alert.alert('Error', `Could not open the checkout page. Please visit the website.`);
-        }
-        // Optionally refresh status after a delay or user interaction
-        // setTimeout(fetchSubscriptionStatus, 10000); 
-      } else {
-           Alert.alert('Error', 'Checkout URL not received from server.');
-      }
-    } catch (error: any) {
-      console.error('Checkout error:', error);
-      Alert.alert('Error', error.message || 'Error starting checkout. Please try again.');
-    } finally {
-       setIsProcessingSubscription(false);
-    }
-  };
-
- const handleCancelSubscription = () => {
-    if (!user?.email) return;
-
-    Alert.alert(
-        'Confirm Cancellation',
-        'Are you sure you want to cancel? Your access will continue until the end of the current period.',
-        [
-            { text: 'Keep Subscription', style: 'cancel' },
-            {
-                text: 'Confirm Cancel',
-                style: 'destructive',
-                onPress: async () => {
-                    setIsProcessingSubscription(true);
-                    try {
-                        const response = await fetch(`${API_BASE_URL}/api/cancelSubscription`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Client-Type': 'mobile',
-                            },
-                            body: JSON.stringify({ userEmail: user.email }),
-                        });
-
-                        const data = await response.json();
-
-                        if (!response.ok) {
-                            throw new Error(data.error || 'Failed to cancel subscription');
-                        }
-
-                        Alert.alert('Success', 'Subscription cancelled. Access continues until the period ends.');
-                        await fetchSubscriptionStatus(); // Refresh status
-
-                    } catch (error: any) {
-                        console.error('Error canceling subscription:', error);
-                        Alert.alert('Error', error.message || 'Failed to cancel subscription. Please try again.');
-                    } finally {
-                        setIsProcessingSubscription(false);
-                    }
-                },
-            },
-        ]
-    );
-};
-
   const formatTimeRemaining = (endDate: string | null): string => {
     if (!endDate) return 'N/A';
     const end = new Date(endDate);
@@ -209,6 +131,257 @@ export default function ProfileScreen() {
       if (!dateString) return 'N/A';
       return new Date(dateString).toLocaleDateString();
   };
+
+  const renderSubscriptionCard = () => {
+    // Find the product details (assuming only one subscription product)
+    const subscriptionProduct = products.find(p => p.productId === IAP_PRODUCT_ID_IOS);
+
+    return (
+      <View style={styles.card}>
+        <Ionicons name="card-outline" size={30} color={COLORS.primaryPink} style={styles.cardIcon} />
+        <Text style={styles.cardTitle}>Subscription Status</Text>
+        {subscriptionStatus === 'trial' ? (
+          <View style={styles.statusContainer}>
+            <Ionicons name="star" size={18} color={COLORS.secondaryPink} />
+            <Text style={styles.statusText}>Trial Active</Text>
+          </View>
+        ) : subscriptionStatus === 'premium' ? (
+          <View style={styles.statusContainer}>
+            <Ionicons name="star" size={18} color={COLORS.secondaryPink} />
+            <Text style={styles.statusText}>{subscriptionDetails?.isCanceled ? 'Premium (Canceling)' : 'Premium Member'}</Text>
+          </View>
+        ) : subscriptionStatus === 'trial-canceling' || subscriptionStatus === 'canceling' ? (
+          <View style={styles.statusContainer}>
+            <Ionicons name="star-outline" size={18} color={COLORS.textSecondary} />
+            <Text style={[styles.statusText, styles.statusCanceling]}>Access Ending Soon</Text>
+          </View>
+        ) : (
+          <View style={styles.statusContainer}>
+            <Ionicons name="star-outline" size={18} color={COLORS.textSecondary} />
+            <Text style={styles.statusText}>Free Plan</Text>
+          </View>
+        )}
+
+        {subscriptionDetails && (
+          <View style={styles.detailsContainer}>
+            {(subscriptionStatus === 'trial' || subscriptionStatus === 'trial-canceling') && subscriptionDetails.trialEndsAt && (
+              <Text style={styles.detailText}>Trial Ends: {formatDate(subscriptionDetails.trialEndsAt)} ({formatTimeRemaining(subscriptionDetails.trialEndsAt)})</Text>
+            )}
+            {(subscriptionStatus === 'premium' || subscriptionStatus === 'canceling') && subscriptionDetails.subscriptionEndsAt && (
+              <Text style={styles.detailText}>
+                {subscriptionDetails.isCanceled ? 'Access Ends:' : 'Renews:'} {formatDate(subscriptionDetails.subscriptionEndsAt)} ({formatTimeRemaining(subscriptionDetails.subscriptionEndsAt)})
+              </Text>
+            )}
+            {subscriptionStatus === 'free' && (
+              <Text style={styles.detailText}>{subscriptionDetails.hadTrial ? 'Trial period used.' : '3-day free trial available.'}</Text>
+            )}
+          </View>
+        )}
+        {subscriptionStatus === 'free' && Platform.OS === 'ios' && isIapConnected && subscriptionProduct && (
+          <TouchableOpacity
+            style={[styles.button, styles.upgradeButton]}
+            onPress={() => handlePurchase(IAP_PRODUCT_ID_IOS)}
+            disabled={isPurchasing || isRestoring}
+          >
+            {isPurchasing ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.buttonText}>
+                {subscriptionDetails?.hadTrial ? 'Upgrade to Premium' : 'Start Free Trial'} ({subscriptionProduct.price})
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+        {subscriptionStatus === 'free' && Platform.OS === 'ios' && !subscriptionProduct && isIapConnected && (
+            <Text style={styles.loadingText}>Loading subscription options...</Text>
+        )}
+        {subscriptionStatus === 'free' && Platform.OS === 'ios' && !isIapConnected && (
+             <Text style={styles.errorText}>Cannot load subscription. Check App Store connection.</Text>
+        )}
+      </View>
+    );
+  };
+
+  // --- IAP Effects ---
+
+  // Connect and disconnect from the App Store
+  useEffect(() => {
+    const connectAndFetch = async () => {
+      try {
+        console.log('[IAP] Connecting to App Store...');
+        await InAppPurchases.connectAsync();
+        setIsIapConnected(true);
+        console.log('[IAP] Connected.');
+      } catch (e) {
+        console.error('[IAP] Connection Error:', e);
+        Alert.alert('App Store Error', 'Could not connect to the App Store. Please check your connection and try again.');
+      }
+    };
+
+    connectAndFetch();
+
+    return () => {
+      console.log('[IAP] Disconnecting...');
+      InAppPurchases.disconnectAsync();
+      setIsIapConnected(false);
+      console.log('[IAP] Disconnected.');
+    };
+  }, []);
+
+  // Fetch products when connected
+  useEffect(() => {
+    if (isIapConnected) {
+      const fetchProducts = async () => {
+        console.log('[IAP] Fetching products...');
+        const itemSkus = Platform.select({
+          ios: [IAP_PRODUCT_ID_IOS],
+          // android: [IAP_PRODUCT_ID_ANDROID] // Add Android ID if needed
+        });
+
+        if (!itemSkus) {
+           console.warn('[IAP] No product SKUs defined for this platform.');
+           return;
+        }
+
+        try {
+          const { responseCode, results } = await InAppPurchases.getProductsAsync(itemSkus);
+          if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+            console.log('[IAP] Products fetched:', results);
+            setProducts(results);
+          } else {
+            console.error('[IAP] Error fetching products, response code:', responseCode);
+            Alert.alert('App Store Error', 'Could not fetch subscription details.');
+          }
+        } catch (e) {
+          console.error('[IAP] Error fetching products:', e);
+          Alert.alert('App Store Error', 'An error occurred while fetching subscription details.');
+        }
+      };
+      fetchProducts();
+    }
+  }, [isIapConnected]);
+
+  // Listen for purchase updates
+  useEffect(() => {
+    // No need to store the result, setPurchaseListener returns void
+    InAppPurchases.setPurchaseListener(
+      ({ responseCode, results, errorCode }) => {
+        console.log('[IAP] Purchase Update:', { responseCode, results, errorCode });
+        setIsPurchasing(false); // Stop loading indicator on any response
+        setIsRestoring(false); // Stop restore indicator
+
+        if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+          results.forEach(async (purchase) => {
+            if (!purchase.acknowledged) {
+              console.log(`[IAP] Finishing transaction for ${purchase.productId}...`);
+              // TODO: IMPORTANT - Verify purchase receipt with your backend FIRST
+              // Only finish transaction after backend confirms validity
+              try {
+                  // --- Backend Verification Step (Pseudo-code) ---
+                  // const verificationResponse = await fetch(`${API_BASE_URL}/api/verify-iap`, {
+                  //   method: 'POST',
+                  //   headers: { 'Content-Type': 'application/json', 'x-user-email': user?.email },
+                  //   body: JSON.stringify({ receipt: purchase.transactionReceipt, platform: Platform.OS })
+                  // });
+                  // if (!verificationResponse.ok) throw new Error('Backend verification failed');
+                  // const verificationData = await verificationResponse.json();
+                  // if (!verificationData.isValid) throw new Error('Invalid receipt');
+                  // --- End Backend Verification ---
+
+                  // If verification is successful:
+                  await InAppPurchases.finishTransactionAsync(purchase, false);
+                  console.log(`[IAP] Transaction finished for ${purchase.productId}`);
+                  Alert.alert('Purchase Successful', 'Your subscription is now active!');
+                  fetchSubscriptionStatus(); // Refresh user status from backend
+
+              } catch (verificationError) {
+                  console.error('[IAP] Receipt verification or transaction finish error:', verificationError);
+                  Alert.alert('Verification Error', 'Could not verify your purchase. Please contact support.');
+                  // Do NOT finish transaction if verification fails
+              }
+            }
+          });
+        } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
+          console.log('[IAP] User cancelled the purchase flow.');
+          Alert.alert('Purchase Cancelled', 'The purchase was cancelled.');
+        } else if (responseCode === InAppPurchases.IAPResponseCode.DEFERRED) {
+           console.log('[IAP] Purchase deferred (requires parent approval).');
+           Alert.alert('Purchase Pending', 'Your purchase requires approval.');
+        } else {
+          console.error(`[IAP] Purchase Error: Code ${responseCode}, ErrorCode: ${errorCode}`);
+          Alert.alert('Purchase Failed', `An error occurred during the purchase. Code: ${errorCode || responseCode}`);
+        }
+      }
+    );
+
+    // Remove the return function that tried to call .remove()
+    // Cleanup is handled by disconnectAsync in the connection useEffect
+  }, [fetchSubscriptionStatus]); // Add fetchSubscriptionStatus as dependency
+
+  // --- End IAP Effects ---
+
+  // --- IAP Handlers ---
+
+  const handlePurchase = async (productId: string) => {
+    if (!isIapConnected) {
+      Alert.alert('App Store Error', 'Not connected to the App Store.');
+      return;
+    }
+    if (isPurchasing) {
+      console.log('[IAP] Purchase already in progress.');
+      return;
+    }
+
+    console.log(`[IAP] Attempting to purchase ${productId}...`);
+    setIsPurchasing(true);
+    try {
+      await InAppPurchases.purchaseItemAsync(productId);
+      // The purchase listener will handle success/failure/cancellation
+    } catch (error: any) {
+      console.error('[IAP] Error initiating purchase:', error);
+      Alert.alert('Purchase Error', 'An error occurred while starting the purchase process.');
+      setIsPurchasing(false);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+     if (!isIapConnected) {
+       Alert.alert('App Store Error', 'Not connected to the App Store.');
+       return;
+     }
+     if (isRestoring) {
+       console.log('[IAP] Restore already in progress.');
+       return;
+     }
+
+     console.log('[IAP] Attempting to restore purchases...');
+     setIsRestoring(true);
+     try {
+       if (Platform.OS === 'ios') {
+         // Call with no arguments, listener should handle results
+         await InAppPurchases.getPurchaseHistoryAsync();
+         // The purchase listener should pick up any restored purchases needing finishing.
+         // We might not get immediate feedback here, listener handles it.
+         Alert.alert('Restore Initiated', 'If you have an active subscription, it should be restored shortly.');
+       } else {
+         // On Android, connectAsync often triggers restoration checks
+         // No explicit restore function needed via expo-in-app-purchases usually.
+         // We might want to re-fetch status from our backend instead.
+         Alert.alert('Restore', 'Checking for existing subscriptions...');
+         fetchSubscriptionStatus(); // Re-check backend status as primary method on Android
+       }
+     } catch (error: any) {
+       console.error('[IAP] Error restoring purchases:', error);
+       Alert.alert('Restore Error', 'An error occurred while trying to restore purchases.');
+     } finally {
+        // Listener handles setting isRestoring back to false upon completion/error
+        // We might set it false here after a timeout if listener doesn't respond?
+        // For now, rely on listener.
+        // setIsRestoring(false); // Or let the listener handle this
+     }
+  };
+
+  // --- End IAP Handlers ---
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -235,73 +408,22 @@ export default function ProfileScreen() {
                     {/* Add other user info if available from context */}
                 </View>
 
-                {/* Subscription Card */}
-                <View style={styles.card}>
-                    <Ionicons name="card-outline" size={30} color={COLORS.primaryPink} style={styles.cardIcon} />
-                    <Text style={styles.cardTitle}>Subscription Status</Text>
-                    {subscriptionStatus === 'trial' ? (
-                        <View style={styles.statusContainer}>
-                            <Ionicons name="star" size={18} color={COLORS.secondaryPink} />
-                            <Text style={styles.statusText}>Trial Active</Text>
-                        </View>
-                    ) : subscriptionStatus === 'premium' ? (
-                         <View style={styles.statusContainer}>
-                            <Ionicons name="star" size={18} color={COLORS.secondaryPink} />
-                            <Text style={styles.statusText}>{subscriptionDetails?.isCanceled ? 'Premium (Canceling)' : 'Premium Member'}</Text>
-                        </View>
-                    ) : subscriptionStatus === 'trial-canceling' || subscriptionStatus === 'canceling' ? (
-                        <View style={styles.statusContainer}>
-                            <Ionicons name="star-outline" size={18} color={COLORS.textSecondary} />
-                            <Text style={[styles.statusText, styles.statusCanceling]}>Access Ending Soon</Text>
-                        </View>
+                {renderSubscriptionCard()}
+
+                {/* Restore Purchases Button (iOS only) */} 
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.restoreButton]}
+                    onPress={handleRestorePurchases}
+                    disabled={isRestoring || isPurchasing || !isIapConnected}
+                  >
+                    {isRestoring ? (
+                      <ActivityIndicator color={COLORS.primaryPink} />
                     ) : (
-                        <View style={styles.statusContainer}>
-                            <Ionicons name="star-outline" size={18} color={COLORS.textSecondary} />
-                            <Text style={styles.statusText}>Free Plan</Text>
-                        </View>
+                      <Text style={styles.restoreButtonText}>Restore Purchases</Text>
                     )}
-
-                    {subscriptionDetails && (
-                        <View style={styles.detailsContainer}>
-                            {(subscriptionStatus === 'trial' || subscriptionStatus === 'trial-canceling') && subscriptionDetails.trialEndsAt && (
-                                <Text style={styles.detailText}>Trial Ends: {formatDate(subscriptionDetails.trialEndsAt)} ({formatTimeRemaining(subscriptionDetails.trialEndsAt)})</Text>
-                            )}
-                            {(subscriptionStatus === 'premium' || subscriptionStatus === 'canceling') && subscriptionDetails.subscriptionEndsAt && (
-                                <Text style={styles.detailText}>
-                                    {subscriptionDetails.isCanceled ? 'Access Ends:' : 'Renews:'} {formatDate(subscriptionDetails.subscriptionEndsAt)} ({formatTimeRemaining(subscriptionDetails.subscriptionEndsAt)})
-                                </Text>
-                            )}
-                            {subscriptionStatus === 'free' && (
-                                <Text style={styles.detailText}>{subscriptionDetails.hadTrial ? 'Trial period used.' : '3-day free trial available.'}</Text>
-                            )}
-                        </View>
-                    )}
-
-                    {/* Action Buttons */}                    
-                    {(subscriptionStatus === 'premium' || subscriptionStatus === 'trial') && !subscriptionDetails?.isCanceled ? (
-                        <TouchableOpacity
-                            style={[styles.button, styles.cancelButton]}
-                            onPress={handleCancelSubscription}
-                            disabled={isProcessingSubscription}
-                        >
-                            {isProcessingSubscription ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.buttonText}>Cancel Subscription</Text>}
-                        </TouchableOpacity>
-                    ) : subscriptionStatus === 'free' && (
-                        <TouchableOpacity
-                            style={[styles.button, styles.upgradeButton]}
-                            onPress={handleCheckout}
-                            disabled={isProcessingSubscription}
-                        >
-                             {isProcessingSubscription ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.buttonText}>{!subscriptionDetails?.hadTrial ? 'Start Free Trial' : 'Upgrade to Premium'}</Text>}
-                        </TouchableOpacity>
-                    )}
-                     {/* Add Manage Subscription button if needed - requires a portal URL from backend */} 
-                     {/* { (subscriptionStatus === 'premium' || subscriptionStatus === 'trial') && 
-                        <TouchableOpacity style={[styles.button, styles.manageButton]} onPress={handleManageSubscription}> 
-                            <Text style={styles.buttonText}>Manage Subscription</Text>
-                        </TouchableOpacity>
-                     } */} 
-                </View>
+                  </TouchableOpacity>
+                )}
 
                  {/* Sign Out Button */}
                  <TouchableOpacity
@@ -448,5 +570,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  restoreButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.primaryPink,
+    marginTop: 10, // Add some space above sign out
+    marginBottom: 20,
+  },
+  restoreButtonText: {
+    color: COLORS.primaryPink,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  loadingText: {
+    marginTop: 10,
+    textAlign: 'center',
+    color: COLORS.textSecondary,
+  },
+  errorText: {
+    marginTop: 10,
+    textAlign: 'center',
+    color: COLORS.errorRed,
   },
 });

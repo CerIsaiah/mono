@@ -12,6 +12,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     EXPO_CLIENT_ID: process.env.EXPO_CLIENT_ID,
     IOS_CLIENT_ID: process.env.IOS_CLIENT_ID,
     ANDROID_CLIENT_ID: process.env.ANDROID_CLIENT_ID,
+    IOS_GOOGLE_SIGN_IN_CLIENT_ID: process.env.IOS_GOOGLE_SIGN_IN_CLIENT_ID,
+    IOS_GOOGLE_APP_ID: process.env.IOS_GOOGLE_APP_ID,
+    IOS_GCK_DEFAULT_CHANNEL_ID: process.env.IOS_GCK_DEFAULT_CHANNEL_ID,
+    IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID: process.env.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID,
   };
 
   // Log environment variables for debugging
@@ -45,12 +49,32 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       '**/*'
     ],
     ios: {
-      supportsTablet: true,
-      bundleIdentifier: 'com.smoothrizz.app',
-      googleServicesFile: './GoogleService-Info.plist',
+      deploymentTarget: "13.0",
       infoPlist: {
-        ITSAppUsesNonExemptEncryption: false
-      }
+        GOOGLE_SIGN_IN_CLIENT_ID: ENV.IOS_GOOGLE_SIGN_IN_CLIENT_ID,
+        SKAdNetworkItems: [{ SKAdNetworkIdentifier: "cstr6suwn9.skadnetwork" }],
+        GOOGLE_APP_ID: ENV.IOS_GOOGLE_APP_ID,
+        GCKDefaultChannelID: ENV.IOS_GCK_DEFAULT_CHANNEL_ID,
+        CFBundleURLTypes: [
+          {
+            CFBundleURLSchemes: [
+              `com.googleusercontent.apps.${ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID.split(".").pop()}`,
+              'com.smoothrizz.app',
+              ENV.IOS_GOOGLE_SIGN_IN_REVERSED_CLIENT_ID
+            ],
+          },
+        ],
+      },
+      entitlements: {
+        "com.apple.developer.applesignin": ["Default"],
+      },
+      config: {
+        usesNonExemptEncryption: false,
+      },
+      bundleIdentifier: "com.smoothrizz.app",
+      googleServicesFile: './GoogleService-Info.plist',
+      buildNumber: '1.0.0',
+      supportsTablet: true,
     },
     android: {
       adaptiveIcon: {
@@ -67,6 +91,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-router',
       '@react-native-firebase/app',
       '@react-native-google-signin/google-signin',
+      'expo-in-app-purchases',
       [
         'expo-build-properties',
         {

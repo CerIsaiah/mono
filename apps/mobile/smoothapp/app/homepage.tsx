@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // Assuming use of Expo icons
 import { useRouter } from 'expo-router'; // Import useRouter
 import { useAuth } from '../src/context/AuthContext'; // Import useAuth
@@ -17,6 +17,10 @@ const COLORS = {
   lightGrey: '#E0E0E0', // Added for lightGrey color
 };
 
+// Add API base URL constant and Minimum Learning Percentage
+const API_BASE_URL = 'https://mono-production-8ef9.up.railway.app'; // Replace with your actual API URL or use env variables
+const MIN_LEARNING_PERCENTAGE = 10; // Or import from a shared constants file
+
 // Placeholder for user data - replace with actual data fetching
 const userName = 'Isaiah';
 const pickupLine = 'Are you French? Because Eiffel for you.';
@@ -25,7 +29,49 @@ const weeklyStars = 5; // Example value
 
 export default function HomeScreen() {
   const router = useRouter(); // Initialize router
-  const { signOut, isLoading, user } = useAuth(); // Get signOut function, isLoading state, and user info
+  const { signOut, isLoading: isAuthLoading, user } = useAuth(); // Get signOut function, isLoading state, and user info
+  const [matchPercentage, setMatchPercentage] = useState(MIN_LEARNING_PERCENTAGE);
+  const [isFetchingPercentage, setIsFetchingPercentage] = useState(true);
+
+  // Fetch Learning Percentage
+  useEffect(() => {
+    const fetchLearningPercentage = async () => {
+      if (!user?.email) {
+        console.log("No user email found, skipping percentage fetch.");
+        setIsFetchingPercentage(false);
+        setMatchPercentage(MIN_LEARNING_PERCENTAGE); // Set default if no user
+        return;
+      }
+
+      setIsFetchingPercentage(true);
+      try {
+        const headers: Record<string, string> = {
+          'x-user-email': user.email,
+        };
+
+        console.log(`Fetching learning percentage for ${user.email}...`);
+        const response = await fetch(`${API_BASE_URL}/api/learning-percentage`, { headers });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Error fetching learning percentage:', response.status, errorText);
+          throw new Error(`Failed to fetch learning percentage: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log("Learning percentage data received:", data);
+        setMatchPercentage(data.percentage || MIN_LEARNING_PERCENTAGE);
+
+      } catch (error) {
+        console.error('Error fetching learning percentage:', error);
+        setMatchPercentage(MIN_LEARNING_PERCENTAGE); // Set default on error
+      } finally {
+        setIsFetchingPercentage(false);
+      }
+    };
+
+    fetchLearningPercentage();
+  }, [user?.email]); // Re-run effect if user email changes
 
   const handleUploadPress = () => {
     router.push('/upload'); // Navigate to the upload screen
@@ -41,13 +87,19 @@ export default function HomeScreen() {
     }
   };
 
+  // Debug logs before rendering
+  console.log('[DEBUG] Rendering HomeScreen...');
+  console.log(`[DEBUG] isFetchingPercentage: ${isFetchingPercentage}`);
+  console.log(`[DEBUG] matchPercentage: ${matchPercentage}`);
+  console.log(`[DEBUG] Progress value: ${matchPercentage / 100}`);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         {/* Welcome Header */}
         <View style={styles.header}>
           <Text style={styles.welcomeText}>Welcome <Text style={styles.userName}>{userName}!</Text></Text>
-          <TouchableOpacity onPress={handleLogout} disabled={isLoading} style={styles.logoutButton}>
+          <TouchableOpacity onPress={handleLogout} disabled={isAuthLoading} style={styles.logoutButton}>
             <Ionicons name="log-out-outline" size={28} color={COLORS.primaryPink} />
           </TouchableOpacity>
         </View>
@@ -58,10 +110,23 @@ export default function HomeScreen() {
           <Text style={styles.pickupLineText}>"{pickupLine}"</Text>
         </View>
 
-        {/* Central Circle Element - Re-structured for double ring effect */}
-        <View style={styles.outerCircle}>
-          <View style={styles.innerCircle}>
-            <Ionicons name="flash" size={70} color={COLORS.primaryPink} />
+        {/* Central Circle Element - Simplified Custom Implementation */}
+        <View style={styles.progressContainer}>
+          {/* Background Track (Light Grey Border) */}
+          <View style={styles.progressBackgroundCircle} />
+
+          {/* Progress Fill (using transforms) */}
+          <View style={[styles.progressHalfCircleWrapper, { transform: [{ rotate: `${(matchPercentage / 100) * 360}deg` }] }]}>
+            <View style={styles.progressHalfCircle} />
+          </View>
+
+          {/* Content (Percentage Text or Loader) */}
+          <View style={styles.progressContent}> 
+            {isFetchingPercentage ? (
+              <ActivityIndicator size="large" color={COLORS.primaryPink} />
+            ) : (
+              <Text style={styles.percentageText}>{`${matchPercentage}%`}</Text>
+            )}
           </View>
         </View>
 
@@ -174,30 +239,63 @@ const styles = StyleSheet.create({
     fontWeight: '500', // Slightly bolder
     paddingHorizontal: 10, // Ensure text doesn't touch edges
   },
-  // Styles for nested circle approach
-  outerCircle: {
-    width: 220, // Outer diameter
-    height: 220,
-    borderRadius: 110,
+  // Container for the Progress Circle and its content
+  progressContainer: {
+    width: 200, // Should match the size prop of Progress.Circle
+    height: 200,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.primaryPink, // Dark pink thick "border"
-    marginBottom: 40, // Increased spacing
-    // This simulates the outer thick ring. Progress part needs library.
-     padding: 10, // This creates the thickness of the outer ring
-
+    marginBottom: 40, // Spacing below the circle
+    position: 'relative', // Needed for absolute positioning of content
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  innerCircle: {
-     width: 200, // Diameter inside the outer ring
-     height: 200,
-     borderRadius: 100, // Fully circular
-     backgroundColor: COLORS.lighterPink, // Lightest pink background
-     justifyContent: 'center',
-     alignItems: 'center',
-     borderWidth: 8, // Thickness of the inner light pink ring
-     borderColor: COLORS.secondaryPink, // Medium pink inner ring color
+  // Background track for the progress circle
+  progressBackgroundCircle: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 10, // Same thickness as progress arc
+    borderColor: COLORS.lightGrey, // Unfilled color
+    position: 'absolute',
+    backgroundColor: 'transparent', // Keep center hollow
   },
-   smoothRizzContainer: {
+  // New styles for custom progress circle
+  progressHalfCircleWrapper: {
+    width: 200,
+    height: 200,
+    position: 'absolute',
+    overflow: 'hidden', // Clip the half circle
+  },
+  progressHalfCircle: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 10, // Thickness of the progress arc
+    borderColor: 'transparent', // Make base border transparent
+    borderBottomColor: COLORS.primaryPink, // Show only bottom half (adjust rotation)
+    borderRightColor: COLORS.primaryPink,  // Show only right half (adjust rotation)
+    backgroundColor: 'transparent', // Ensure no background color
+    transform: [{ rotate: '-135deg' }], // Start position (adjust as needed)
+  },
+  // Absolutely positioned view to center content inside the Progress Circle
+  progressContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2, // Ensure content is on top
+  },
+  smoothRizzContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.lightPink, // Use light pink
@@ -279,6 +377,12 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Add style for the percentage text
+  percentageText: {
+    fontSize: 48, // Large font size for percentage
+    fontWeight: 'bold',
+    color: COLORS.primaryPink,
   },
   // Add styles for Bottom Tab Navigator icons if needed (usually handled by the navigator)
   bottomNav: {
