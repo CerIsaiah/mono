@@ -16,6 +16,15 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
+import {
+  configureReanimatedLogger,
+  ReanimatedLogLevel,
+} from 'react-native-reanimated';
+
+configureReanimatedLogger({
+  level: ReanimatedLogLevel.warn,
+  strict: false, // Reanimated runs in strict mode by default
+});
 
 // Define API Base URL (Hardcoded for clarity based on .env and railway)
 const API_BASE_URL = 'https://mono-production-8ef9.up.railway.app';
@@ -143,18 +152,22 @@ export default function SwipesPage() {
            setIsPremium(statusData.isPremium || false);
            setUsageCount(statusData.dailySwipes || 0);
            // Determine initial canSwipe state based on limits
-           setCanSwipe(statusData.isPremium || (statusData.dailySwipes || 0) < FREE_USER_DAILY_LIMIT);
+           const initialCanSwipe = statusData.isPremium || (statusData.dailySwipes || 0) < FREE_USER_DAILY_LIMIT;
+           console.log('[DEBUG] fetchInitialData: Received status:', statusData, 'Setting initial canSwipe to:', initialCanSwipe);
+           setCanSwipe(initialCanSwipe);
            console.log('Initial user status:', { isPremium: statusData.isPremium, usage: statusData.dailySwipes });
        } else {
           console.warn('Failed to fetch initial user status, assuming free user limits.');
           setIsPremium(false);
           setUsageCount(0); // Default to 0 if fetch fails?
+          console.log('[DEBUG] fetchInitialData: Failed to fetch status. Setting canSwipe to true (assuming free user).');
           setCanSwipe(true); // Assume can swipe until first swipe fails?
        }
     } catch(err) {
-        console.error("Error fetching initial user data:", err);
+        console.error("[DEBUG] fetchInitialData: Error fetching initial data:", err);
         setIsPremium(false); // Assume not premium on error
         setUsageCount(0);
+        console.log('[DEBUG] fetchInitialData: Error occurred. Setting canSwipe to true (assuming free user).');
         setCanSwipe(true);
     }
     fetchLearningPercentage(); // Fetch learning percentage after getting user info
@@ -193,6 +206,7 @@ export default function SwipesPage() {
         console.log('Received responses:', data.responses.length);
         setResponses(data.responses);
         setCurrentIndex(data.responses.length > 0 ? data.responses.length - 1 : 0); // Reset index for Swiper
+        console.log('[DEBUG] fetchResponses: Success. Setting canSwipe to true.');
         setCanSwipe(true); // Allow swiping new cards
         setError(null); // Clear previous errors
 
@@ -275,6 +289,7 @@ export default function SwipesPage() {
       // Use the isPremium state variable fetched initially
       const swipesLimit = isPremium ? Infinity : FREE_USER_DAILY_LIMIT;
       const stillCanSwipe = data.canSwipe && (isPremium || currentUsage < swipesLimit);
+      console.log('[DEBUG] trackSwipe: Received data:', data, 'Calculated stillCanSwipe:', stillCanSwipe);
       setCanSwipe(stillCanSwipe);
 
       if (!data.canSwipe || !stillCanSwipe) {
@@ -303,12 +318,15 @@ export default function SwipesPage() {
   };
 
   const handleSwipe = async (index: number, direction: 'left' | 'right') => {
-      console.log(`handleSwipe triggered for index ${index}, direction ${direction}. Checking canSwipe state:`, canSwipe);
-      if (!canSwipe) {
-          console.log("Cannot swipe, limit reached or generation in progress.");
-          // Optionally add visual feedback or reset the card position
-          return;
-      }
+       // Log both the event index and the state index for clarity
+       console.log(`[DEBUG] handleSwipe: START. Swiper Event Index: ${index}, Direction: ${direction}, Current canSwipe: ${canSwipe}, Current State Index: ${currentIndex}`);
+
+       if (!canSwipe) {
+           console.log("[DEBUG] handleSwipe: BLOCKED by !canSwipe check.");
+           console.log("Cannot swipe, limit reached or generation in progress."); // Keep original log too
+           // Optionally add visual feedback or reset the card position
+           return;
+       }
 
       const allowed = await trackSwipe(direction);
       if (!allowed) {
@@ -321,13 +339,15 @@ export default function SwipesPage() {
           return;
       }
 
-      // Update current index locally for UI consistency before swiper animation finishes
-      const newIndex = index - 1;
-      setCurrentIndex(newIndex); // Decrement index
+      // Calculate newIndex based on the CURRENT state index, not the event index
+      const newIndex = currentIndex - 1;
+      console.log(`[DEBUG] handleSwipe: Updating State Index from ${currentIndex} to ${newIndex}`);
+      setCurrentIndex(newIndex); // Decrement state index
 
       // Perform direction-specific actions (save response) only if tracking was allowed
       if (direction === 'right') {
-          const responseText = responses[index];
+          // Use the state's currentIndex to get the correct response data
+          const responseText = responses[currentIndex];
           console.log('Attempting Save:', responseText);
           if (user?.email) {
               try {
@@ -360,10 +380,11 @@ export default function SwipesPage() {
               console.warn('Cannot save response, user not logged in.');
           }
       } else {
-          console.log('Skipped:', responses[index]);
+          // Use the state's currentIndex to log the correct skipped response
+          console.log('Skipped:', responses[currentIndex]);
       }
 
-      // Check if it was the last card
+      // Check if it was the last card based on the new state index
       if (newIndex < 0) {
           handleSwipedAll();
       }
@@ -380,9 +401,14 @@ export default function SwipesPage() {
 
   const handleSwipedAll = () => {
     console.log('Swiped all cards!');
-    setError("You've seen all responses for this image. Regenerate or go back."); // Inform user
-    // Ensure swiping stops if not already stopped
-    setCanSwipe(false);
+    console.log('[DEBUG] handleSwipedAll: Queueing state updates.');
+    // Delay state updates slightly to allow animation to finish
+    // setTimeout(() => {
+        setError("You've seen all responses for this image. Regenerate or go back."); // Inform user
+        console.log('[DEBUG] handleSwipedAll: Setting canSwipe to false (reverted).');
+        // Ensure swiping stops if not already stopped
+        setCanSwipe(false);
+    // }, 100); // 100ms delay, adjust if needed
   };
 
   // Regenerate function
@@ -514,7 +540,6 @@ export default function SwipesPage() {
               // animateCardOpacity // Removed invalid prop
               // Removed invalid props: stackSize, stackSeparation, stackScale, disableLeftSwipe, disableRightSwipe, infinite, cardIndex
               // Swipe disabling is handled in handleSwipe
-              onSwipeEnd={() => console.log('Swipe animation ended')} // Corrected signature for onSwipeEnd
             />
           </View>
         ) : (

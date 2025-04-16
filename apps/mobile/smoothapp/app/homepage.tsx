@@ -200,6 +200,13 @@ export default function HomeScreen() {
         <TouchableOpacity style={[styles.button, styles.manualButton]}>
           <Text style={styles.manualButtonText}>Type Text Manually</Text>
         </TouchableOpacity>
+        {/* New Button for Image Rating */}
+        <TouchableOpacity 
+          style={[styles.button, styles.imageRatingButton]} // Use a distinct style or reuse manualButton
+          onPress={() => router.push('/image-rating' as any)} // Cast to any to bypass strict type check
+        >
+          <Text style={styles.imageRatingButtonText}>Rate Image</Text>
+        </TouchableOpacity>
 
       </ScrollView>
 
@@ -425,6 +432,19 @@ const styles = StyleSheet.create({
   },
   manualButtonText: {
     color: COLORS.black,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Style for the new button (can be same as manualButton or different)
+  imageRatingButton: {
+    backgroundColor: COLORS.white,
+    borderWidth: 2, 
+    borderColor: COLORS.secondaryPink, // Use a different color like secondaryPink
+    elevation: 2,
+    shadowOpacity: 0.05,
+  },
+  imageRatingButtonText: {
+    color: COLORS.secondaryPink, // Match border color
     fontSize: 16,
     fontWeight: 'bold',
   },

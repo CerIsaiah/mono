@@ -110,7 +110,6 @@ export default function SavedResponsesScreen() {
       }
 
       setResponses((prev) => prev.filter((r) => r.created_at !== item.created_at));
-       Alert.alert('Success', 'Response deleted.'); // Optional success message
     } catch (error: any) {
       console.error('Error deleting response:', error);
       Alert.alert('Error', error.message || 'Could not delete response.');

@@ -2,15 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { initializeAuth } from 'firebase/auth';
 import { getReactNativePersistence } from 'firebase/auth/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 
 const firebaseConfig = {
-  apiKey: Constants.expoConfig?.extra?.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: Constants.expoConfig?.extra?.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: Constants.expoConfig?.extra?.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: Constants.expoConfig?.extra?.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: Constants.expoConfig?.extra?.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: Constants.expoConfig?.extra?.EXPO_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyDdCX_FkVINtXe_fHReoZ4FPgDoez3gaU4",
+  authDomain: "smooth-450006.firebaseapp.com",
+  projectId: "smooth-450006",
+  storageBucket: "smooth-450006.firebasestorage.app",
+  messagingSenderId: "776336590279",
+  appId: "1:776336590279:ios:ce5a62ea3bf08d0adf85e2",
 };
 
 // Initialize Firebase

@@ -239,4 +239,50 @@ router.post('/openai', async (req, res) => {
   }
 });
 
+router.post('/rate-image', async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Missing imageBase64 in request body' });
+    }
+    // Validate base64 format
+    if (!/^[A-Za-z0-9+/=]+$/.test(imageBase64)) {
+      return res.status(400).json({ error: 'Invalid base64 format' });
+    }
+
+    const messages: any[] = [
+      {
+        role: 'system',
+        content: 'You are a helpful assistant. Rate the following image on a scale from 1 (worst) to 10 (best) and give a brief explanation.'
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Please rate this image on a scale from 1 to 10 and explain your rating briefly.' },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+        ]
+      }
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: 'o4-mini-2025-04-16',
+      messages,
+      temperature: 0.5,
+      max_tokens: 150
+    });
+
+    const message = response.choices[0].message;
+    if (!message.content) throw new Error('No content received from OpenAI');
+
+    return res.json({ rating: message.content, requestId: crypto.randomUUID() });
+  } catch (error: any) {
+    logger.error('Image rating error', {
+      error: error.message,
+      stack: error.stack,
+      requestId: crypto.randomUUID()
+    });
+    return res.status(500).json({ error: error.message, requestId: crypto.randomUUID() });
+  }
+});
+
 export default router;

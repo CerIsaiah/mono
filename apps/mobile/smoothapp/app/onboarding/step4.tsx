@@ -16,7 +16,7 @@ import { useAuth } from '../../src/context/AuthContext'; // Adjusted path
 import { Button } from '../../src/components/Button'; // Adjusted path
 import * as AppleAuthentication from 'expo-apple-authentication';
 
-const OnboardingStep4 = () => {
+export default function OnboardingStep4() {
   const router = useRouter(); // Although router is here, navigation is handled by RootLayout
   const { 
     signInWithGoogle,
@@ -120,8 +120,7 @@ const OnboardingStep4 = () => {
       <Button
         onPress={handleEmailSignIn}
         disabled={isLoading}
-        style={styles.button}
-        textStyle={styles.buttonText}
+        className="w-full py-3 px-4 rounded-lg bg-white mb-3"
       >
         {isLoading ? 'Signing in...' : 'Sign In with Email'}
       </Button>
@@ -130,9 +129,8 @@ const OnboardingStep4 = () => {
       <Button
         onPress={handleEmailSignUp}
         disabled={isLoading}
-        variant="outline" // Assuming Button supports variants like your login page
-        style={[styles.button, styles.outlineButton]}
-        textStyle={[styles.buttonText, styles.outlineButtonText]}
+        variant="outline"
+        className="w-full py-3 px-4 rounded-lg bg-transparent border border-white mb-3"
       >
         {isLoading ? 'Signing up...' : 'Sign Up with Email'}
       </Button>
@@ -141,8 +139,7 @@ const OnboardingStep4 = () => {
       <Button
         onPress={handleGoogleSignIn}
         disabled={isLoading}
-        style={styles.button} // Reuse styles or create specific ones
-        textStyle={styles.buttonText}
+        className="w-full py-3 px-4 rounded-lg bg-white mb-3"
       >
         {isLoading ? 'Signing in...' : 'Sign in with Google'}
       </Button>
@@ -154,7 +151,7 @@ const OnboardingStep4 = () => {
         ) : (
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE} // White style for purple background
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
             cornerRadius={5}
             style={[styles.button, styles.appleButton, styles.appleButtonSpacing]}
             onPress={handleAppleSignIn}
@@ -175,7 +172,7 @@ const OnboardingStep4 = () => {
 
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -261,5 +258,3 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
 });
-
-export default OnboardingStep4;
