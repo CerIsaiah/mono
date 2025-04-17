@@ -50,6 +50,8 @@ export default function HomeScreen() {
   const [nextGiftThreshold, setNextGiftThreshold] = useState(SWIPES_PER_GIFT);
   const [isGiftUnlocked, setIsGiftUnlocked] = useState(false);
   const [currentPickupLine, setCurrentPickupLine] = useState<string | null>(null);
+  const [hasSeenCurrentGift, setHasSeenCurrentGift] = useState(false); // Track if user has seen current gift
+  const [completedGifts, setCompletedGifts] = useState(0); // Track completed gifts
   const [giftTaps, setGiftTaps] = useState(0);
   const [giftScale] = useState(new Animated.Value(1));
   const [circleScale] = useState(new Animated.Value(1));
@@ -57,6 +59,7 @@ export default function HomeScreen() {
   const [glowOpacity] = useState(new Animated.Value(0.2));
   const [glowRadius] = useState(new Animated.Value(2));
   const [showGiftContent, setShowGiftContent] = useState(false);
+  const [isResettingSwipes, setIsResettingSwipes] = useState(false);
   const [currentGiftIndex, setCurrentGiftIndex] = useState(0);
   const [isTextInputModalVisible, setIsTextInputModalVisible] = useState(false);
   const [context, setContext] = useState('');
@@ -66,57 +69,7 @@ export default function HomeScreen() {
   const [showModeSelection, setShowModeSelection] = useState(false);
   const [spicyLevel, setSpicyLevel] = useState(50);
 
-  // Load persisted gift state
-  useEffect(() => {
-    const loadGiftState = async () => {
-      try {
-        if (user?.email) {
-          const [giftState, giftContentState] = await Promise.all([
-            AsyncStorage.getItem(`gift_state_${user.email}`),
-            AsyncStorage.getItem(`gift_content_${user.email}`)
-          ]);
-          
-          if (giftState) {
-            const { currentGiftIndex: savedIndex } = JSON.parse(giftState);
-            setCurrentGiftIndex(savedIndex);
-          }
-          
-          if (giftContentState) {
-            const { showGiftContent: savedShowGiftContent } = JSON.parse(giftContentState);
-            setShowGiftContent(savedShowGiftContent);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading gift state:', error);
-      }
-    };
-    loadGiftState();
-  }, [user?.email]);
-
-  // Save gift state when it changes
-  useEffect(() => {
-    const saveGiftState = async () => {
-      try {
-        if (user?.email) {
-          await AsyncStorage.setItem(`gift_state_${user.email}`, JSON.stringify({
-            currentGiftIndex
-          }));
-        }
-      } catch (error) {
-        console.error('Error saving gift state:', error);
-      }
-    };
-    saveGiftState();
-  }, [currentGiftIndex, user?.email]);
-
-  // Remove debug logs
-  useEffect(() => {
-    if (user?.email) {
-      fetchUserData();
-    }
-  }, [user?.email]); // Only fetch when user email changes
-
-  // Update fetchUserData to handle pickup lines from API
+  // Fetch user data - Define before use in useFocusEffect
   const fetchUserData = useCallback(async () => {
     if (!user?.email) {
       console.log("No user email found, skipping data fetch.");
@@ -129,6 +82,8 @@ export default function HomeScreen() {
       setNextGiftThreshold(SWIPES_PER_GIFT);
       setIsGiftUnlocked(false);
       setCurrentPickupLine(null);
+      setHasSeenCurrentGift(false);
+      setCompletedGifts(0);
       setShowGiftContent(false);
       return;
     }
@@ -159,15 +114,26 @@ export default function HomeScreen() {
         setBoostedConvos(statsData.boostedConvos || 0);
         setDaysActive(statsData.daysActive || 0);
         setCurrentSwipes(statsData.currentSwipes || 0);
+        setCompletedGifts(statsData.completedGifts || 0);
         
         const nextThreshold = Math.ceil(statsData.currentSwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
         setNextGiftThreshold(nextThreshold);
         
-        const isUnlocked = statsData.currentSwipes >= nextThreshold;
+        // Check if a gift is available from completed gifts
+        const isUnlocked = statsData.completedGifts > 0;
         setIsGiftUnlocked(isUnlocked);
         
         // Handle pickup line from API response
         setCurrentPickupLine(statsData.currentPickupLine);
+        setHasSeenCurrentGift(statsData.hasSeenCurrentGift || false);
+        
+        // If we have a gift and it's already been seen, show the content
+        if (statsData.currentPickupLine && statsData.hasSeenCurrentGift) {
+          setShowGiftContent(true);
+          await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
+            showGiftContent: true
+          }));
+        }
       } else {
         setBoostedConvos(0);
         setDaysActive(0);
@@ -175,6 +141,8 @@ export default function HomeScreen() {
         setNextGiftThreshold(SWIPES_PER_GIFT);
         setIsGiftUnlocked(false);
         setCurrentPickupLine(null);
+        setHasSeenCurrentGift(false);
+        setCompletedGifts(0);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -185,11 +153,44 @@ export default function HomeScreen() {
       setNextGiftThreshold(SWIPES_PER_GIFT);
       setIsGiftUnlocked(false);
       setCurrentPickupLine(null);
+      setHasSeenCurrentGift(false);
+      setCompletedGifts(0);
     } finally {
       setIsFetchingPercentage(false);
       setIsFetchingStats(false);
     }
   }, [user?.email]);
+
+  // Load persisted gift state
+  useEffect(() => {
+    const loadGiftState = async () => {
+      try {
+        if (user?.email) {
+          const [giftContentState] = await Promise.all([
+            AsyncStorage.getItem(`gift_content_${user.email}`)
+          ]);
+          
+          if (giftContentState) {
+            const { showGiftContent: savedShowGiftContent } = JSON.parse(giftContentState);
+            setShowGiftContent(savedShowGiftContent);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading gift state:', error);
+      }
+    };
+    loadGiftState();
+  }, [user?.email]);
+
+  // Use useFocusEffect to refresh data when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.email) {
+        fetchUserData();
+      }
+      return () => {}; // cleanup function
+    }, [user?.email, fetchUserData])
+  );
 
   const handleUploadPress = () => {
     router.push('/upload'); // Navigate to the upload screen
@@ -294,7 +295,6 @@ export default function HomeScreen() {
     ]).start(async () => {
       setShowGiftContent(true);
       setGiftTaps(0);
-      setCurrentGiftIndex(prev => prev + 1);
       giftRotation.setValue(0);
       giftScale.setValue(1);
       circleScale.setValue(1);
@@ -308,16 +308,15 @@ export default function HomeScreen() {
           await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
             showGiftContent: true
           }));
+          
+          // Set that this gift has been seen
+          setHasSeenCurrentGift(true);
+          
+          // Fetch new data to update UI
+          fetchUserData();
         }
       } catch (error) {
         console.error('Error saving gift content state:', error);
-      }
-      
-      // Check if we have more gifts after this one
-      const giftProgress = calculateGiftProgress();
-      if (giftProgress.remainingGifts === 0) {
-        // If no more gifts, fetch new data to update UI
-        fetchUserData();
       }
     });
 
@@ -374,29 +373,34 @@ export default function HomeScreen() {
 
   // Calculate progress percentage
   const calculateProgress = () => {
-    const completedGifts = Math.floor(currentSwipes / SWIPES_PER_GIFT);
-    const nextGiftThreshold = (completedGifts + 1) * SWIPES_PER_GIFT;
-    const progressTowardsNext = currentSwipes - (completedGifts * SWIPES_PER_GIFT);
+    if (currentSwipes === 0) return 0;
+    
+    const progressTowardsNext = currentSwipes % SWIPES_PER_GIFT;
+    // If we're at the start of a new gift (divisible by SWIPES_PER_GIFT), show 100%
+    if (progressTowardsNext === 0) return 100;
+    
+    // Otherwise show progress toward next gift
     const progress = (progressTowardsNext / SWIPES_PER_GIFT) * 100;
-    return Math.min(progress, 100);
+    return progress;
   };
 
   // Calculate gift progress numbers
   const calculateGiftProgress = () => {
-    const completedGifts = Math.floor(currentSwipes / SWIPES_PER_GIFT);
-    const nextGiftThreshold = (completedGifts + 1) * SWIPES_PER_GIFT;
-    const progressTowardsNext = currentSwipes - (completedGifts * SWIPES_PER_GIFT);
-    const remainingSwipes = nextGiftThreshold - currentSwipes;
-    const remainingGifts = Math.floor(currentSwipes / SWIPES_PER_GIFT) - currentGiftIndex;
-    const hasGiftAvailable = remainingGifts > 0;
+    const currentCompleted = Math.floor(currentSwipes / SWIPES_PER_GIFT);
+    const nextThreshold = (currentCompleted + (currentSwipes % SWIPES_PER_GIFT === 0 ? 0 : 1)) * SWIPES_PER_GIFT;
+    const progressTowardsNext = currentSwipes % SWIPES_PER_GIFT;
+    const remainingSwipes = progressTowardsNext === 0 ? SWIPES_PER_GIFT : (nextThreshold - currentSwipes);
+    
+    // A gift is available if we've completed a threshold (divisible by SWIPES_PER_GIFT)
+    // and we haven't seen the current gift yet
+    const hasGiftAvailable = (progressTowardsNext === 0 && currentSwipes > 0) && !hasSeenCurrentGift;
     
     return {
-      currentProgress: progressTowardsNext,
-      nextThreshold: nextGiftThreshold,
+      currentProgress: progressTowardsNext === 0 ? SWIPES_PER_GIFT : progressTowardsNext,
+      nextThreshold: nextThreshold,
       remainingSwipes,
-      completedGifts,
-      hasGiftAvailable,
-      remainingGifts
+      completedGifts: currentCompleted,
+      hasGiftAvailable
     };
   };
 
@@ -453,6 +457,37 @@ export default function HomeScreen() {
     setLastText('');
     setSelectedMode('first-move');
     setSpicyLevel(50);
+  };
+
+  // Handle resetting daily swipes
+  const handleResetSwipes = async () => {
+    if (!user?.email || currentSwipes === 0) return;
+    
+    setIsResettingSwipes(true);
+    
+    try {
+      const headers: Record<string, string> = {
+        'x-user-email': user.email,
+        'X-Client-Type': 'mobile',
+      };
+      
+      const response = await fetch(`${API_BASE_URL}/api/reset-daily-swipes`, {
+        method: 'POST',
+        headers
+      });
+      
+      if (response.ok) {
+        Alert.alert('Success', 'Daily swipes reset. Let\'s go!');
+        fetchUserData();
+      } else {
+        Alert.alert('Error', 'Failed to reset swipes. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error resetting swipes:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setIsResettingSwipes(false);
+    }
   };
 
   return (
@@ -573,6 +608,21 @@ export default function HomeScreen() {
           >
             <Text style={styles.manualButtonText}>Type Text Manually</Text>
           </TouchableOpacity>
+          
+          {/* Reset Swipes Button - Show only when user has done some swipes */}
+          {currentSwipes > 0 && (
+            <TouchableOpacity 
+              style={[styles.button, styles.resetButton, isResettingSwipes && styles.disabledButton]}
+              onPress={handleResetSwipes}
+              disabled={isResettingSwipes}
+            >
+              {isResettingSwipes ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
+              ) : (
+                <Text style={styles.resetButtonText}>Reset Daily Swipes</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 
@@ -1164,5 +1214,17 @@ const styles = StyleSheet.create({
   spicyLevelText: {
     fontSize: 12,
     color: COLORS.textSecondary,
+  },
+  resetButton: {
+    backgroundColor: COLORS.secondaryPink,
+    marginTop: 8,
+  },
+  resetButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });

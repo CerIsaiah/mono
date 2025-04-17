@@ -68,7 +68,7 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
         // Get user data including total usage
         const { data: userData, error: fetchError } = await supabase
             .from('users')
-            .select('copy_count, login_timestamps, daily_usage')
+            .select('copy_count, login_timestamps, daily_usage, seen_pickup_lines')
             .eq('email', userEmail)
             .maybeSingle();
 
@@ -89,12 +89,14 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
                 daysActive: 0,
                 currentSwipes: 0,
                 nextGiftThreshold: SWIPES_PER_GIFT,
-                currentPickupLine: null
+                currentPickupLine: null,
+                hasSeenCurrentGift: false
             });
         }
 
         const boostedConvos = userData.copy_count || 0;
         const dailySwipes = userData.daily_usage || 0;
+        const seenPickupLines = userData.seen_pickup_lines || [];
 
         // Calculate unique days active
         let daysActive = 0;
@@ -118,35 +120,72 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
 
         // Calculate next gift threshold based on daily swipes
         const nextGiftThreshold = Math.ceil(dailySwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
-
-        // Get next pickup line from database
-        const { data: pickupLineData, error: pickupLineError } = await supabase
-            .rpc('get_next_pickup_line', { user_email: userEmail });
-
-        if (pickupLineError) {
-            logger.error('Error fetching pickup line', {
+        const completedGifts = Math.floor(dailySwipes / SWIPES_PER_GIFT);
+        
+        // Get all pickup lines from the database
+        const { data: allPickupLines, error: allLinesError } = await supabase
+            .from('pickup_lines')
+            .select('id, line, times_used')
+            .eq('is_active', true)
+            .order('id');
+            
+        if (allLinesError) {
+            logger.error('Error fetching pickup lines', {
                 email: userEmail,
-                error: pickupLineError.message,
-                stack: pickupLineError.stack
+                error: allLinesError.message,
+                stack: allLinesError.stack
             });
-            return res.status(500).json({ error: 'Failed to fetch pickup line' });
+            return res.status(500).json({ error: 'Failed to fetch pickup lines' });
         }
+        
+        // Select a pickup line based on completed gifts and tracking
+        let currentLineId = null;
+        let currentLineText = null;
+        let hasSeenCurrentGift = false;
+        
+        if (allPickupLines && allPickupLines.length > 0 && completedGifts > 0) {
+            // Calculate which pickup line to show based on completed gifts
+            const lineIndex = (completedGifts - 1) % allPickupLines.length;
+            const selectedLine = allPickupLines[lineIndex];
+            
+            if (selectedLine) {
+                currentLineId = selectedLine.id;
+                currentLineText = selectedLine.line;
+                hasSeenCurrentGift = seenPickupLines.includes(currentLineId);
+                
+                // Update seen pickup lines if not already seen
+                if (!hasSeenCurrentGift) {
+                    // Mark this pickup line as seen by adding it to the user's seen_pickup_lines array
+                    const updatedSeenLines = [...seenPickupLines, currentLineId];
+                    
+                    const { error: updateError } = await supabase
+                        .from('users')
+                        .update({ seen_pickup_lines: updatedSeenLines })
+                        .eq('email', userEmail);
 
-        // Mark the pickup line as seen if one was returned
-        if (pickupLineData && pickupLineData.length > 0) {
-            const { error: markSeenError } = await supabase
-                .rpc('mark_pickup_line_seen', { 
-                    user_email: userEmail, 
-                    line_id: pickupLineData[0].line_id 
-                });
+                    if (updateError) {
+                        logger.error('Error updating seen pickup lines', {
+                            email: userEmail,
+                            lineId: currentLineId,
+                            error: updateError.message,
+                            stack: updateError.stack
+                        });
+                    } else {
+                        // Also increment the times_used counter for this pickup line
+                        const { error: incrementError } = await supabase
+                            .from('pickup_lines')
+                            .update({ times_used: selectedLine.times_used + 1 })
+                            .eq('id', currentLineId);
 
-            if (markSeenError) {
-                logger.error('Error marking pickup line as seen', {
-                    email: userEmail,
-                    lineId: pickupLineData[0].line_id,
-                    error: markSeenError.message,
-                    stack: markSeenError.stack
-                });
+                        if (incrementError) {
+                            logger.error('Error incrementing pickup line usage', {
+                                lineId: currentLineId,
+                                error: incrementError.message,
+                                stack: incrementError.stack
+                            });
+                        }
+                    }
+                }
             }
         }
 
@@ -156,7 +195,8 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive,
             dailySwipes,
             nextGiftThreshold,
-            hasPickupLine: !!pickupLineData?.[0]
+            currentLineId,
+            hasSeenCurrentGift
         });
 
         res.status(200).json({ 
@@ -164,7 +204,9 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive,
             currentSwipes: dailySwipes,
             nextGiftThreshold,
-            currentPickupLine: pickupLineData?.[0]?.line_text || null
+            currentPickupLine: currentLineText,
+            hasSeenCurrentGift,
+            completedGifts
         });
 
     } catch (error: any) {
@@ -174,6 +216,40 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             stack: error.stack
         });
         res.status(500).json({ error: 'Internal server error while fetching stats' });
+    }
+});
+
+// POST /api/reset-daily-swipes
+router.post('/reset-daily-swipes', authenticateUser, async (req: Request, res: Response) => {
+    const userEmail = (req as any).userEmail;
+    const supabase = getSupabaseClient();
+
+    try {
+        // Reset the daily usage for the user
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ daily_usage: 0 })
+            .eq('email', userEmail);
+
+        if (updateError) {
+            logger.error('Error resetting daily swipes', {
+                email: userEmail,
+                error: updateError.message,
+                stack: updateError.stack
+            });
+            return res.status(500).json({ error: 'Failed to reset daily swipes' });
+        }
+
+        logger.info('Successfully reset daily swipes', { email: userEmail });
+        res.status(200).json({ success: true, message: 'Daily swipes reset successfully' });
+
+    } catch (error: any) {
+        logger.error('Error resetting daily swipes', {
+            email: userEmail,
+            error: error.message,
+            stack: error.stack
+        });
+        res.status(500).json({ error: 'Internal server error while resetting swipes' });
     }
 });
 
