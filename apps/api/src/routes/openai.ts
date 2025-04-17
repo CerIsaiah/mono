@@ -268,7 +268,6 @@ router.post('/rate-image', async (req, res) => {
       model: 'o4-mini-2025-04-16',
       messages,
       temperature: 1,
-      max_completion_tokens: 150
     });
 
     // Log the full choice object for debugging
