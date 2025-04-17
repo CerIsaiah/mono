@@ -13,7 +13,7 @@ const PICKUP_LINES = [
     "Is your name Google? Because you've got everything I've been searching for.",
 ];
 
-const SWIPES_PER_GIFT = 15;
+const SWIPES_PER_GIFT = 10;
 
 // Middleware to check for user email in header
 const authenticateUser = (req: Request, res: Response, next: NextFunction) => {

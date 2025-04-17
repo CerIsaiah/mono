@@ -21,7 +21,7 @@ const COLORS = {
 // Add API base URL constant and Minimum Learning Percentage
 const API_BASE_URL = 'https://mono-production-8ef9.up.railway.app'; // Replace with your actual API URL or use env variables
 const MIN_LEARNING_PERCENTAGE = 10; // Or import from a shared constants file
-const SWIPES_PER_GIFT = 10; // Number of swipes needed to unlock a gift
+const SWIPES_PER_GIFT = 15; // Number of swipes needed to unlock a gift
 
 // Placeholder for user data - replace with actual data fetching
 const userName = 'Isaiah';
