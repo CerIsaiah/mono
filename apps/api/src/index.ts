@@ -11,6 +11,7 @@ import checkoutRouter from './routes/checkout';
 import webhooksRouter from './routes/webhooks';
 import cancelSubscriptionRouter from './routes/cancelSubscription';
 import userActionsRouter from './routes/userActions';
+import faceFindRouter from './routes/face-find';
 import { logger } from './utils/logger';
 
 process.on('uncaughtException', (error) => {
@@ -120,6 +121,7 @@ app.use('/api/checkout', checkoutRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/cancelSubscription', cancelSubscriptionRouter);
 app.use('/api', userActionsRouter);
+app.use('/api/face', faceFindRouter);
 
 logger.info('Routes mounted', {
   routes: [
@@ -132,7 +134,8 @@ logger.info('Routes mounted', {
     '/api/learning-percentage',
     '/api/checkout',
     '/api/webhooks',
-    '/api/cancelSubscription'
+    '/api/cancelSubscription',
+    '/api/face'
   ]
 });
 

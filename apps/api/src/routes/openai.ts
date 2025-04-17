@@ -97,7 +97,57 @@ Return array with exactly 10 responses following all above rules JSON PARSEABLE
 """`,
 };
 
+// Helper function to validate base64 format
+const isValidBase64 = (str: string): boolean => /^[A-Za-z0-9+/=]+$/.test(str);
+
+// Helper function to perform a single image rating with OpenAI
+async function rateSingleImage(imageBase64: string): Promise<string> {
+  if (!isValidBase64(imageBase64)) {
+    throw new Error('Invalid base64 format provided');
+  }
+
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      // Shortened prompt for brevity and focused rating
+      content: `Rate the image for a dating profile (like Tinder) on a scale from 1 (worst) to 10 (best). Start your response with the numerical score (e.g., "8/10"). Provide a brief (10-15 word) explanation for the rating. Focus on aspects relevant to dating profiles (e.g., clarity, attractiveness, vibe, conversation starters).`
+    },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Rate this image (1-10) for a dating profile and briefly explain.' },
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+      ]
+    }
+  ];
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Using mini for cost/speed efficiency
+      messages: messages,
+      max_tokens: 80, // Limit tokens for a brief response
+      temperature: 0.5, // Lower temperature for more consistent rating format
+    });
+
+    const message = response.choices[0].message;
+    const finishReason = response.choices[0].finish_reason;
+
+    if (!message.content) {
+      logger.warn('No content received from OpenAI for single image rating', { finish_reason: finishReason });
+      throw new Error(`No content from AI. Reason: ${finishReason}`);
+    }
+
+    return message.content.trim();
+
+  } catch (error: any) {
+    logger.error('OpenAI API call failed during single image rating', { error: error.message, stack: error.stack });
+    // Re-throw a more specific error or return a marker string
+    throw new Error(`Failed to rate image: ${error.message}`);
+  }
+}
+
 router.post('/openai', async (req, res) => {
+  const requestId = crypto.randomUUID(); // Generate request ID early
   try {
     const requestIP =
       (req.headers['x-forwarded-for'] as string)?.split(',')[0] || 'unknown';
@@ -111,57 +161,56 @@ router.post('/openai', async (req, res) => {
     
     const { imageBase64, mode = 'first-move', context, lastText, spicyLevel = 50, firstMoveIdeas = '' } = req.body;
 
-    console.log('Debug - OpenAI Request:', {
+    logger.info('Debug - OpenAI Request:', {
       ip: requestIP,
       isSignedIn: !!userEmail,
       timestamp: new Date().toISOString(),
       spicyLevel,
       hasFirstMoveIdeas: !!firstMoveIdeas,
+      mode,
+      requestId,
     });
 
-    let userMessage: any[] = [{
-      type: 'text',
-      text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them): ${firstMoveIdeas}` : ''}`,
-    }];
+    let userMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     if (imageBase64) {
       // Validate base64 string
-      if (!/^[A-Za-z0-9+/=]+$/.test(imageBase64)) {
-        throw new Error('Invalid base64 format');
+      if (!isValidBase64(imageBase64)) {
+        return res.status(400).json({
+          error: 'Invalid base64 format',
+          requestId,
+        });
       }
 
       userMessage = [
         {
-          type: 'text',
-          text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:image/jpeg;base64,${imageBase64}`,
-          },
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`,
+              },
+            },
+          ],
         },
       ];
     } else if (context && lastText) {
       userMessage = [
         {
-          type: 'text',
-          text: `Context of conversation: ${context}\n\nLast message from them: ${lastText}\n\nWhat should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
+          role: 'user',
+          content: `Context of conversation: ${context}\n\nLast message from them: ${lastText}\n\nWhat should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
         },
       ];
-    }
-
-    // Validate input: must provide either image or conversation details, not both.
-    if (!imageBase64 && (!context || !lastText)) {
+    } else {
+      // Validate input: must provide either image or conversation details.
       return res.status(400).json({
-        error: 'Please provide either an image or conversation details',
-        requestId: crypto.randomUUID(),
-      });
-    }
-    if (imageBase64 && (context || lastText)) {
-      return res.status(400).json({
-        error: 'Please provide either an image or conversation details, not both',
-        requestId: crypto.randomUUID(),
+        error: 'Please provide either an image or conversation details (context and lastText)',
+        requestId,
       });
     }
 
@@ -174,10 +223,7 @@ router.post('/openai', async (req, res) => {
           role: 'system',
           content: SYSTEM_PROMPTS['first-move'],
         },
-        {
-          role: 'user',
-          content: userMessage,
-        },
+        ...userMessage, // Spread the user message(s) here
       ],
       response_format: {
         type: 'json_schema',
@@ -214,83 +260,122 @@ router.post('/openai', async (req, res) => {
       throw new Error('No content received from OpenAI');
     }
 
-    const parsedResponses = JSON.parse(message.content).responses;
+    let parsedResponses;
+    try {
+      parsedResponses = JSON.parse(message.content).responses;
+    } catch (parseError: any) {
+      logger.error('Failed to parse OpenAI JSON response', { content: message.content, error: parseError.message, requestId });
+      throw new Error(`Failed to parse response from AI: ${parseError.message}`);
+    }
 
     if (!Array.isArray(parsedResponses) || parsedResponses.length !== 10) {
+      logger.warn('Invalid number/format of responses received', { count: parsedResponses?.length, requestId });
       throw new Error(
-        `Invalid number of responses: Expected 10, got ${parsedResponses.length}`
+        `Invalid response format: Expected an array of 10 strings, received differently.`
       );
     }
 
     return res.json({
       responses: parsedResponses,
-      requestId: crypto.randomUUID(),
+      requestId,
     });
   } catch (error: any) {
-    logger.error('OpenAI API error', {
+    logger.error('OpenAI API error (/openai route)', {
       error: error.message,
       stack: error.stack,
-      requestId: crypto.randomUUID()
+      requestId,
     });
-    return res.status(500).json({
-      error: error.message,
-      requestId: crypto.randomUUID(),
+    // Ensure a consistent error response structure
+    const errorMessage = error.message || 'An internal server error occurred';
+    const statusCode = error.response?.status || 500; // Use status from OpenAI error if available
+    return res.status(statusCode).json({
+      error: errorMessage,
+      requestId,
     });
   }
 });
 
+// Endpoint to rate a single image (kept for potential other uses or testing)
 router.post('/rate-image', async (req, res) => {
+  const requestId = crypto.randomUUID();
   try {
     const { imageBase64 } = req.body;
     if (!imageBase64) {
-      return res.status(400).json({ error: 'Missing imageBase64 in request body' });
-    }
-    // Validate base64 format
-    if (!/^[A-Za-z0-9+/=]+$/.test(imageBase64)) {
-      return res.status(400).json({ error: 'Invalid base64 format' });
+      return res.status(400).json({ error: 'Missing imageBase64 in request body', requestId });
     }
 
-    const messages: any[] = [
-      {
-        role: 'system',
-        content: 'You are a helpful assistant. Rate the following image on a scale from 1 (worst) to 10 (best) and give a brief explanation. For tinder'
-      },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Please rate this image on a scale from 1 to 10 and explain your rating briefly.' },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
-        ]
-      }
-    ];
+    const rating = await rateSingleImage(imageBase64); // Use the helper function
 
-    const response = await openai.chat.completions.create({
-      model: "o4-mini",
-      messages: messages,
-    });
+    return res.json({ rating, requestId });
 
-    // Log the full choice object for debugging
-    logger.info('OpenAI Image Rating Choice:', { choice: response.choices[0], requestId: crypto.randomUUID() });
-
-    const message = response.choices[0].message;
-    if (!message.content) {
-      // Include finish_reason in the error for better diagnosis
-      const finishReason = response.choices[0].finish_reason;
-      logger.error('No content received from OpenAI', { 
-        finish_reason: finishReason,
-        requestId: crypto.randomUUID()
-      });
-      throw new Error(`No content received from OpenAI. Finish reason: ${finishReason}`);
-    }
-
-    return res.json({ rating: message.content, requestId: crypto.randomUUID() });
   } catch (error: any) {
-    logger.error('Image rating error', {
+    logger.error('Image rating error (/rate-image route)', {
       error: error.message,
       stack: error.stack,
-      requestId: crypto.randomUUID()
+      requestId,
     });
-    return res.status(500).json({ error: error.message, requestId: crypto.randomUUID() });
+    return res.status(500).json({ error: error.message, requestId });
+  }
+});
+
+// New endpoint to rate multiple images
+router.post('/rate-multiple-images', async (req, res) => {
+  const requestId = crypto.randomUUID();
+  try {
+    const { imagesBase64 } = req.body;
+
+    // Input validation
+    if (!Array.isArray(imagesBase64)) {
+      return res.status(400).json({ error: 'Expected an array of base64 strings in imagesBase64 field', requestId });
+    }
+    if (imagesBase64.length === 0) {
+      return res.status(400).json({ error: 'Received empty array of images', requestId });
+    }
+    if (imagesBase64.length > 10) {
+      logger.warn('Received more than 10 images, limiting to 10.', { count: imagesBase64.length, requestId });
+      // Optionally, trim the array or return an error. Let's trim for now.
+      // imagesBase64 = imagesBase64.slice(0, 10);
+      // Or return error:
+      return res.status(400).json({ error: 'Cannot rate more than 10 images at a time', requestId });
+    }
+
+    logger.info(`Received request to rate ${imagesBase64.length} images`, { requestId });
+
+    // Use Promise.allSettled to handle individual failures gracefully
+    const ratingPromises = imagesBase64.map((base64, index) =>
+      rateSingleImage(base64)
+        .catch(err => {
+          // Log individual errors and return an error marker string
+          logger.error(`Error rating image index ${index}`, { error: err.message, requestId });
+          return `Error: Failed to rate image ${index + 1}`; // User-friendly error marker
+        })
+    );
+
+    // allSettled ensures we get a result for every promise, even if some reject
+    const results = await Promise.allSettled(ratingPromises);
+
+    // Process results, extracting the rating string or error marker
+    const ratings = results.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        return result.value; // This is the rating string or the error marker from the catch block
+      } else {
+        // This case should technically be caught by the .catch inside the map,
+        // but handle it just in case of unexpected errors.
+        logger.error(`Unexpected settlement failure for image index ${index}`, { reason: result.reason, requestId });
+        return `Error: Processing failed for image ${index + 1}`;
+      }
+    });
+
+    return res.json({ ratings, requestId });
+
+  } catch (error: any) {
+    // Catch broader errors (e.g., issues before Promise.allSettled)
+    logger.error('Error in /rate-multiple-images handler', {
+      error: error.message,
+      stack: error.stack,
+      requestId,
+    });
+    return res.status(500).json({ error: 'An internal server error occurred while processing images.', requestId });
   }
 });
 
