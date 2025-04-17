@@ -4,16 +4,7 @@ import { logger } from '../utils/logger';
 
 const router: Router = express.Router();
 
-// Sample pickup lines array (in production, these should be in the database)
-const PICKUP_LINES = [
-    "Are you French? Because Eiffel for you.",
-    "Are you a magician? Because whenever I look at you, everyone else disappears.",
-    "Do you have a map? I keep getting lost in your eyes.",
-    "Are you a camera? Because every time I look at you, I smile.",
-    "Is your name Google? Because you've got everything I've been searching for.",
-];
-
-const SWIPES_PER_GIFT = 10;
+const SWIPES_PER_GIFT = 3;
 
 // Middleware to check for user email in header
 const authenticateUser = (req: Request, res: Response, next: NextFunction) => {
@@ -98,7 +89,7 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
                 daysActive: 0,
                 currentSwipes: 0,
                 nextGiftThreshold: SWIPES_PER_GIFT,
-                currentPickupLine: PICKUP_LINES[0]
+                currentPickupLine: null
             });
         }
 
@@ -125,9 +116,39 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive = uniqueDays.size;
         }
 
-        // Calculate next gift threshold and current pickup line based on daily swipes
+        // Calculate next gift threshold based on daily swipes
         const nextGiftThreshold = Math.ceil(dailySwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
-        const pickupLineIndex = Math.floor(dailySwipes / SWIPES_PER_GIFT) % PICKUP_LINES.length;
+
+        // Get next pickup line from database
+        const { data: pickupLineData, error: pickupLineError } = await supabase
+            .rpc('get_next_pickup_line', { user_email: userEmail });
+
+        if (pickupLineError) {
+            logger.error('Error fetching pickup line', {
+                email: userEmail,
+                error: pickupLineError.message,
+                stack: pickupLineError.stack
+            });
+            return res.status(500).json({ error: 'Failed to fetch pickup line' });
+        }
+
+        // Mark the pickup line as seen if one was returned
+        if (pickupLineData && pickupLineData.length > 0) {
+            const { error: markSeenError } = await supabase
+                .rpc('mark_pickup_line_seen', { 
+                    user_email: userEmail, 
+                    line_id: pickupLineData[0].line_id 
+                });
+
+            if (markSeenError) {
+                logger.error('Error marking pickup line as seen', {
+                    email: userEmail,
+                    lineId: pickupLineData[0].line_id,
+                    error: markSeenError.message,
+                    stack: markSeenError.stack
+                });
+            }
+        }
 
         logger.info('Successfully fetched user stats', { 
             email: userEmail, 
@@ -135,7 +156,7 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive,
             dailySwipes,
             nextGiftThreshold,
-            pickupLineIndex
+            hasPickupLine: !!pickupLineData?.[0]
         });
 
         res.status(200).json({ 
@@ -143,7 +164,7 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive,
             currentSwipes: dailySwipes,
             nextGiftThreshold,
-            currentPickupLine: PICKUP_LINES[pickupLineIndex]
+            currentPickupLine: pickupLineData?.[0]?.line_text || null
         });
 
     } catch (error: any) {

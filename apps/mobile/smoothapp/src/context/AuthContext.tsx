@@ -8,7 +8,7 @@ import {
   createUserWithEmailAndPassword,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes, type User as GoogleUser } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
@@ -105,40 +105,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Check if Play Services are available (Android only)
       if (Platform.OS === 'android') {
-        // Use direct import
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       }
-      
-      // Sign in with Google - Use direct import
-      await GoogleSignin.signIn();
-      // Get tokens - Use direct import
+
+      // Sign in with Google
+      console.log('Initiating Google Sign In...');
+      const userInfo = await GoogleSignin.signIn();
+      console.log('Google Sign In successful:', userInfo);
+
+      // Get tokens immediately after successful sign in
+      console.log('Getting tokens...');
       const { accessToken, idToken } = await GoogleSignin.getTokens();
       
-      if (idToken) { // Only idToken is needed for Firebase credential
-        console.log('Got idToken, creating credential...');
-        const credential = GoogleAuthProvider.credential(idToken);
-        const userCredential = await signInWithCredential(auth, credential); // Get userCredential
-        console.log('Successfully signed in with Google');
-        await syncUserWithBackend(userCredential.user); // Sync after successful sign-in
-      } else {
+      if (!idToken) {
         throw new Error('Failed to get idToken from Google Sign In');
       }
+
+      console.log('Got idToken, creating credential...');
+      const credential = GoogleAuthProvider.credential(idToken);
+      const userCredential = await signInWithCredential(auth, credential);
+      console.log('Successfully signed in with Firebase');
+      await syncUserWithBackend(userCredential.user);
+
     } catch (error: any) {
-      // Handle specific Google Sign In errors
+      console.error('Error signing in with Google:', error);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        console.log('Google Sign In cancelled by user.');
-        // Optionally handle cancellation differently (e.g., do nothing)
+        console.log('User cancelled the sign-in flow');
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        console.log('Google Sign In operation already in progress.');
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        console.error('Play Services not available or outdated.');
-        // Optionally prompt user to update Play Services
-        throw new Error('Play Services not available or outdated.');
+        console.log('Sign-in operation already in progress');
       } else {
-        // Handle other errors
-        console.error('Error signing in with Google:', error);
-        throw error;
+        // Clean up any partial sign-in state
+        try {
+          await GoogleSignin.signOut();
+          await auth.signOut();
+        } catch (cleanupError) {
+          console.error('Cleanup after error failed:', cleanupError);
+        }
       }
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -227,16 +231,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setIsLoading(true);
     try {
-      // Check if user is signed in with Google using getCurrentUser()
-      const googleUser = await GoogleSignin.getCurrentUser(); 
-      if (googleUser !== null) {
-        // Use direct import
-        await GoogleSignin.signOut();
-        console.log('Signed out from Google');
+      // First sign out from Google Sign In
+      try {
+        const currentUser = await GoogleSignin.getCurrentUser();
+        if (currentUser) {
+          await GoogleSignin.signOut();
+          console.log('Signed out from Google');
+        }
+      } catch (error) {
+        console.error('Error signing out from Google:', error);
       }
       
-      await auth.signOut(); // Sign out from Firebase
+      // Then sign out from Firebase
+      await auth.signOut();
       console.log('Signed out from Firebase');
+      
+      // Clear any local state
+      setUser(null);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;

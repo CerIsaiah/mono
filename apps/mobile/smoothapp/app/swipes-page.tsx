@@ -83,24 +83,58 @@ const LoadingModal = ({ visible }: { visible: boolean }) => (
   </Modal>
 );
 
+// Update interface to extend Record<string, string | string[]>
+interface SwipesPageParams {
+  mode: string;
+  context?: string;
+  lastText?: string;
+  imageUri?: string;
+  selectedMode?: string;
+  spicyLevel?: string;
+}
+
+// Main component starts here
 export default function SwipesPage() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ imageUri: string; context: string }>();
-  const { imageUri, context: initialContext } = params;
-
-  const [responses, setResponses] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Initial loading
-  const [isGenerating, setIsGenerating] = useState<boolean>(false); // Regeneration loading
-  const [error, setError] = useState<string | null>(null);
-  const swiperRef = useRef<SwiperCardRefType>(null);
+  const rawParams = useLocalSearchParams();
   const { user } = useAuth(); // Get user from context
-  const [isPremium, setIsPremium] = useState<boolean>(false); // Manage premium status locally
-  const [learningPercentage, setLearningPercentage] = useState<number>(MIN_LEARNING_PERCENTAGE);
+  
+  // Convert params to the correct type and ensure single string values
+  const params: SwipesPageParams = {
+    mode: Array.isArray(rawParams.mode) ? rawParams.mode[0] : String(rawParams.mode),
+    ...(rawParams.context && { context: Array.isArray(rawParams.context) ? rawParams.context[0] : String(rawParams.context) }),
+    ...(rawParams.lastText && { lastText: Array.isArray(rawParams.lastText) ? rawParams.lastText[0] : String(rawParams.lastText) }),
+    ...(rawParams.imageUri && { imageUri: Array.isArray(rawParams.imageUri) ? rawParams.imageUri[0] : String(rawParams.imageUri) }),
+    ...(rawParams.selectedMode && { selectedMode: Array.isArray(rawParams.selectedMode) ? rawParams.selectedMode[0] : String(rawParams.selectedMode) }),
+    ...(rawParams.spicyLevel && { spicyLevel: Array.isArray(rawParams.spicyLevel) ? rawParams.spicyLevel[0] : String(rawParams.spicyLevel) }),
+  };
+
+  // State declarations
+  const [responses, setResponses] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [base64Data, setBase64Data] = useState<string | null>(null);
+  const [initialBase64Data, setInitialBase64Data] = useState<string | null>(null);
+  const [textContext, setTextContext] = useState<string | null>(null);
+  const [textLastMessage, setTextLastMessage] = useState<string | null>(null);
+  const [swiperKey, setSwiperKey] = useState<number>(0);
   const [canSwipe, setCanSwipe] = useState<boolean>(true);
   const [usageCount, setUsageCount] = useState<number>(0);
-  const [currentIndex, setCurrentIndex] = useState<number>(0); // Track current card index for swiper
-  const [initialBase64Data, setInitialBase64Data] = useState<string | null>(null); // Store initial base64
-  const [swiperKey, setSwiperKey] = useState<number>(0); // Key for forcing swiper remount
+  const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [learningPercentage, setLearningPercentage] = useState<number>(0);
+  const swiperRef = useRef<SwiperCardRefType>(null);
+
+  // Add dependency tracking for params with proper typing
+  const {
+    mode,
+    context: initialContext = '',
+    lastText: initialLastText = '',
+    imageUri: initialImageUri = '',
+    selectedMode = 'first-move',
+    spicyLevel: initialSpicyLevel = '50'
+  } = params;
 
   // Moved fetchLearningPercentage definition before its usage
   const fetchLearningPercentage = useCallback(async () => {
@@ -173,80 +207,110 @@ export default function SwipesPage() {
     fetchLearningPercentage(); // Fetch learning percentage after getting user info
   }, [user?.email, fetchLearningPercentage]);
 
-  // Function to fetch responses (used initially and for regeneration)
-  const fetchResponses = useCallback(async (base64Data: string, mode: string) => {
-      setIsGenerating(true); // Use isGenerating for regeneration loading state
-      setError(null);
-      try {
-        console.log('Fetching/Regenerating responses for mode:', mode);
-        const response = await fetch(`${API_BASE_URL}/api/openai`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Client-Type': 'mobile', // Identify client
-            ...(user?.email && { 'x-user-email': user.email }), // Add user email if available
-          },
-          body: JSON.stringify({ imageBase64: base64Data, mode }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('API Error:', response.status, errorData);
-          throw new Error(
-            `API request failed: ${errorData.error || response.statusText}`
-          );
-        }
-
-        const data = await response.json();
-        if (!data.responses || !Array.isArray(data.responses) || data.responses.length === 0) {
-           console.error('Invalid response format or empty responses:', data);
-           throw new Error('Received invalid or empty responses from server.');
-        }
-
-        console.log('Received responses:', data.responses.length);
-        setResponses(data.responses);
-        setCurrentIndex(data.responses.length > 0 ? data.responses.length - 1 : 0); // Reset index for Swiper
-        console.log('[DEBUG] fetchResponses: Success. Setting canSwipe to true.');
-        setCanSwipe(true); // Allow swiping new cards
-        setError(null); // Clear previous errors
-
-      } catch (err: any) {
-        console.error('Error fetching/regenerating responses:', err);
-        setError(err.message || 'An unexpected error occurred.');
-        setResponses([]); // Clear responses on error
-      } finally {
-        setIsGenerating(false);
-        setIsLoading(false); // Also set initial loading to false
-      }
-  }, [user?.email]);
-
-  // Initial load effect
-  useEffect(() => {
-    const prepareAndFetch = async () => {
-        if (!imageUri || !initialContext) {
-            setError('Missing image URI or context.');
-            setIsLoading(false);
-            return;
-        }
-
-        setIsLoading(true);
-        try {
-            const fileContent = await FileSystem.readAsStringAsync(imageUri, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
-            const base64 = fileContent.includes(',') ? fileContent.split(',')[1] : fileContent;
-            setInitialBase64Data(base64); // Store for regeneration
-            await fetchResponses(base64, initialContext);
-        } catch (err: any) {
-             console.error('Error reading image file:', err);
-             setError('Failed to load image data.');
-             setIsLoading(false);
-        }
+  // Helper function to convert image URI to base64
+  const convertImageToBase64 = async (imageUri: string): Promise<string> => {
+    try {
+      const fileContent = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return fileContent.includes(',') ? fileContent.split(',')[1] : fileContent;
+    } catch (error) {
+      console.error('Error converting image to base64:', error);
+      throw new Error('Failed to convert image to base64');
     }
+  };
 
-    prepareAndFetch();
-    fetchInitialData(); // Fetch usage, premium status, and learning percentage
-  }, [imageUri, initialContext, fetchInitialData, fetchResponses]); // Add fetchResponses dependency
+  // Memoize the generateResponses function
+  const generateResponses = useCallback(async (base64?: string | null, context?: string | null, lastMessage?: string | null) => {
+    setIsGenerating(true);
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Client-Type': 'mobile',
+      };
+      
+      if (user?.email) {
+        headers['x-user-email'] = user.email;
+      }
+
+      const requestBody: any = {
+        mode: selectedMode,
+        spicyLevel: parseInt(initialSpicyLevel) || 50,
+      };
+
+      if (base64) {
+        requestBody.imageBase64 = base64;
+      } else if (context && lastMessage) {
+        requestBody.context = context;
+        requestBody.lastText = lastMessage;
+      } else {
+        throw new Error('No valid input provided');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/openai`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate responses');
+      }
+
+      const data = await response.json();
+      if (!data.responses || !Array.isArray(data.responses)) {
+        throw new Error('Invalid response format');
+      }
+
+      setResponses(data.responses);
+      setCurrentIndex(data.responses.length - 1);
+      setSwiperKey(prev => prev + 1);
+      setError(null);
+      setCanSwipe(true);
+
+    } catch (error) {
+      console.error('Error generating responses:', error);
+      setError('Failed to generate responses. Please try again.');
+      setResponses([]);
+      setCanSwipe(false);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [user?.email, selectedMode, initialSpicyLevel]);
+
+  // Memoize the initialization function with proper typing
+  const initializePage = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      // First ensure we have user data
+      await fetchInitialData();
+      
+      if (mode === 'text' && initialContext && initialLastText) {
+        setTextContext(initialContext);
+        setTextLastMessage(initialLastText);
+        await generateResponses(null, initialContext, initialLastText);
+      } else if (initialImageUri) {
+        const base64 = await convertImageToBase64(initialImageUri);
+        setBase64Data(base64);
+        setInitialBase64Data(base64);
+        await generateResponses(base64);
+      } else {
+        throw new Error('Invalid input parameters');
+      }
+    } catch (error) {
+      console.error('Error initializing page:', error);
+      setError('Failed to load conversation. Please try again.');
+      router.back();
+    } finally {
+      setIsLoading(false);
+    }
+  }, [mode, initialContext, initialLastText, initialImageUri, generateResponses, fetchInitialData]);
+
+  // Single initialization effect
+  useEffect(() => {
+    initializePage();
+  }, [initializePage]);
 
   const trackSwipe = async (direction: 'left' | 'right'): Promise<boolean> => {
     if (!user?.email) {
@@ -267,127 +331,82 @@ export default function SwipesPage() {
         body: JSON.stringify({ direction }),
       });
 
-      // Check for 401 Unauthorized specifically
-      if (response.status === 401) {
-          console.error('Swipe tracking failed: Unauthorized (401)');
+      if (!response.ok) {
+        if (response.status === 401) {
           Alert.alert('Authentication Error', 'Your session might have expired. Please log in again.');
           router.replace('/login');
           return false;
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error('Swipe tracking failed:', response.status, data);
+        }
+        
+        const data = await response.json();
         Alert.alert('Error', 'Could not record swipe. Please try again later.');
         return false;
       }
 
+      const data = await response.json();
+      
       // Update usage count and canSwipe state from response
-      const currentUsage = data.dailySwipes || 0;
-      setUsageCount(currentUsage);
-      // Use the isPremium state variable fetched initially
-      const swipesLimit = isPremium ? Infinity : FREE_USER_DAILY_LIMIT;
-      const stillCanSwipe = data.canSwipe && (isPremium || currentUsage < swipesLimit);
-      console.log('[DEBUG] trackSwipe: Received data:', data, 'Calculated stillCanSwipe:', stillCanSwipe);
+      setUsageCount(data.dailySwipes || 0);
+      const stillCanSwipe = data.canSwipe && (isPremium || (data.dailySwipes || 0) < FREE_USER_DAILY_LIMIT);
       setCanSwipe(stillCanSwipe);
 
-      if (!data.canSwipe || !stillCanSwipe) {
-          if (data.requiresUpgrade && !isPremium) {
-              Alert.alert('Limit Reached', 'You have reached your daily swipe limit. Upgrade for unlimited swipes!');
-              // Maybe navigate to upgrade screen?
-              // router.push('/profile');
-          } else if (!isPremium) {
-              Alert.alert('Limit Reached', 'You have reached your swipe limit for today.');
-          } else {
-             // Should not happen for premium users unless API returns canSwipe: false for other reasons
-             console.warn('Cannot swipe despite being premium or within limits. API response:', data);
-             Alert.alert('Error', 'Could not process swipe. Please try again.');
-          }
-          return false; // Return false, don't change currentIndex
+      if (!stillCanSwipe) {
+        if (!isPremium) {
+          Alert.alert('Limit Reached', 'You have reached your daily swipe limit. Upgrade for unlimited swipes!');
+        } else {
+          Alert.alert('Error', 'Could not process swipe. Please try again.');
+        }
+        return false;
       }
 
-      console.log('Swipe tracked. Usage:', currentUsage);
-      return true; // Swipe was successful and tracked
+      return true;
 
     } catch (error) {
       console.error('Error tracking swipe:', error);
-      Alert.alert('Error', 'An network error occurred while tracking swipe.');
+      Alert.alert('Error', 'A network error occurred while tracking swipe.');
       return false;
     }
   };
 
   const handleSwipe = async (index: number, direction: 'left' | 'right') => {
-       // Log both the event index and the state index for clarity
-       console.log(`[DEBUG] handleSwipe: START. Swiper Event Index: ${index}, Direction: ${direction}, Current canSwipe: ${canSwipe}, Current State Index: ${currentIndex}`);
+    if (!canSwipe) {
+      return;
+    }
 
-       if (!canSwipe) {
-           console.log("[DEBUG] handleSwipe: BLOCKED by !canSwipe check.");
-           console.log("Cannot swipe, limit reached or generation in progress."); // Keep original log too
-           // Optionally add visual feedback or reset the card position
-           return;
-       }
+    const allowed = await trackSwipe(direction);
+    if (!allowed) {
+      return;
+    }
 
-      const allowed = await trackSwipe(direction);
-      if (!allowed) {
-          // If tracking fails (e.g., limit reached), prevent the UI change
-          // The Swiper component might need manual reset or prevention logic here
-          // For now, we just log it. The `canSwipe` state should prevent further swipes.
-          console.log(`Swipe ${direction} blocked by trackSwipe.`);
-          // Attempt to restore card? (Might be complex with rn-swiper-list)
-          // swiperRef.current?.goBack(); // Check if such a method exists
-          return;
+    const newIndex = currentIndex - 1;
+    setCurrentIndex(newIndex);
+
+    if (direction === 'right' && user?.email) {
+      try {
+        const responseText = responses[currentIndex];
+        await fetch(`${API_BASE_URL}/api/saved-responses`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-email': user.email,
+            'X-Client-Type': 'mobile',
+          },
+          body: JSON.stringify({
+            userEmail: user.email,
+            response: responseText,
+            context: textContext || 'unknown',
+            created_at: new Date().toISOString(),
+          }),
+        });
+        await fetchLearningPercentage();
+      } catch (error) {
+        console.error('Error saving response:', error);
       }
+    }
 
-      // Calculate newIndex based on the CURRENT state index, not the event index
-      const newIndex = currentIndex - 1;
-      console.log(`[DEBUG] handleSwipe: Updating State Index from ${currentIndex} to ${newIndex}`);
-      setCurrentIndex(newIndex); // Decrement state index
-
-      // Perform direction-specific actions (save response) only if tracking was allowed
-      if (direction === 'right') {
-          // Use the state's currentIndex to get the correct response data
-          const responseText = responses[currentIndex];
-          console.log('Attempting Save:', responseText);
-          if (user?.email) {
-              try {
-                  const saveResponse = await fetch(`${API_BASE_URL}/api/saved-responses`, {
-                      method: 'POST',
-                      headers: {
-                          'Content-Type': 'application/json',
-                          'x-user-email': user.email,
-                          'X-Client-Type': 'mobile',
-                      },
-                      body: JSON.stringify({
-                          userEmail: user.email,
-                          response: responseText,
-                          context: initialContext || 'unknown', // Use initial context
-                          created_at: new Date().toISOString(),
-                      }),
-                  });
-                  if (!saveResponse.ok) {
-                      const errorData = await saveResponse.json().catch(() => ({}));
-                      console.error('Failed to save response:', saveResponse.status, errorData);
-                      // Non-critical error, maybe show a toast?
-                  } else {
-                      console.log('Response saved successfully.');
-                      await fetchLearningPercentage(); // Update learning bar
-                  }
-              } catch (error) {
-                  console.error('Error saving response:', error);
-              }
-          } else {
-              console.warn('Cannot save response, user not logged in.');
-          }
-      } else {
-          // Use the state's currentIndex to log the correct skipped response
-          console.log('Skipped:', responses[currentIndex]);
-      }
-
-      // Check if it was the last card based on the new state index
-      if (newIndex < 0) {
-          handleSwipedAll();
-      }
+    if (newIndex < 0) {
+      handleSwipedAll();
+    }
   };
 
   // Use the index from rn-swiper-list callback
@@ -411,36 +430,20 @@ export default function SwipesPage() {
     // }, 100); // 100ms delay, adjust if needed
   };
 
-  // Regenerate function
+  // Handle regenerate
   const handleRegenerate = async () => {
-      if (!initialBase64Data || !initialContext) {
-          Alert.alert('Error', 'Cannot regenerate without initial image and context.');
-          return;
+    if (isGenerating) return;
+    
+    try {
+      if (textContext && textLastMessage) {
+        await generateResponses(null, textContext, textLastMessage);
+      } else if (base64Data) {
+        await generateResponses(base64Data);
       }
-      if (isGenerating || isLoading) {
-          return; // Prevent multiple calls
-      }
-      // Optional: Check swipe limits again before regenerating?
-      // Note: Regeneration might have its own limits or costs, handle accordingly.
-      // For now, assume regeneration is allowed if user could initially fetch.
-      const canRegenerate = isPremium || usageCount < FREE_USER_DAILY_LIMIT; // Example limit check
-      if (!canRegenerate) {
-          Alert.alert(
-              'Limit Reached', 
-              isPremium 
-                  ? 'An error occurred. Please try again later.' // Premium shouldn't hit limit
-                  : 'You have reached your daily limit and cannot regenerate more responses today. Upgrade for unlimited generations!'
-           );
-          return;
-      }
-
-      console.log('Regenerating responses...');
-      await fetchResponses(initialBase64Data, initialContext);
-      // Force remount of Swiper component by updating its key
-      setSwiperKey(prevKey => prevKey + 1);
-      setCurrentIndex(responses.length > 0 ? responses.length - 1 : 0); // Reset index state too
-      // Reset error state if regeneration is successful
-      setError(null);
+    } catch (error) {
+      console.error('Error regenerating responses:', error);
+      Alert.alert('Error', 'Failed to regenerate responses. Please try again.');
+    }
   };
 
   const renderCard = useCallback((cardData: string, cardIndex: number) => {
@@ -487,7 +490,7 @@ export default function SwipesPage() {
            </TouchableOpacity>
 
             {/* Optional: Add Saved Button - Ensure route exists */}
-            <TouchableOpacity style={styles.savedButton} onPress={() => router.push('/saved' as any)}> // Cast as any to bypass type check temporarily
+            <TouchableOpacity style={styles.savedButton} onPress={() => router.push('/saved' as any)}>
                  <Ionicons name="heart-outline" size={24} color={COLORS.darkGray} />
                  <Text style={styles.savedButtonText}>Saved</Text>
             </TouchableOpacity>
@@ -548,7 +551,7 @@ export default function SwipesPage() {
                 <View style={styles.centeredContainer}>
                     <Text style={styles.infoText}>{error || 'No responses generated.'}</Text>
                      {/* Show regenerate button here too if applicable */}
-                     {initialBase64Data && initialContext && (
+                     {initialBase64Data && textContext && (
                          <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate} disabled={isGenerating}>
                              <Ionicons name="refresh" size={18} color={COLORS.white} />
                              <Text style={styles.actionButtonText}>Regenerate</Text>
@@ -575,7 +578,7 @@ export default function SwipesPage() {
                          <Text style={styles.outlineButtonText}>New Screenshot</Text>
                      </TouchableOpacity>
                      {/* Show regenerate button only if applicable */}
-                     {initialBase64Data && initialContext && (
+                     {initialBase64Data && textContext && (
                          <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate} disabled={isGenerating}>
                              <Ionicons name="refresh" size={20} color={COLORS.white} />
                              <Text style={styles.actionButtonText}>Regenerate</Text>

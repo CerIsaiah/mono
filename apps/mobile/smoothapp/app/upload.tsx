@@ -20,37 +20,27 @@ export default function UploadScreen() {
 
   // Make the handler async and implement image picking
   const handleUploadPress = async () => {
-    // 1. Request permission
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Sorry, we need camera roll permissions to make this work!');
-      return;
-    }
-
-    // 2. Launch image picker
     try {
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images, // Only allow images
-            allowsEditing: true, // Optional: allow user to crop/edit
-            aspect: [4, 3], // Optional: aspect ratio for editing
-            quality: 1, // Highest quality
-        });
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Sorry, we need camera roll permissions to make this work!');
+        return;
+      }
 
-        // 3. Handle result
-        if (!result.canceled) {
-            const imageUri = result.assets[0].uri;
-            console.log('Image picked:', imageUri);
-            // Navigate to choose-context with the actual image URI
-            router.push({ 
-                pathname: '/choose-context', 
-                params: { imageUri: imageUri } 
-            });
-        } else {
-            console.log('Image picking cancelled');
-        }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        router.push({
+          pathname: '/choose-context',
+          params: { imageUri: result.assets[0].uri },
+        });
+      }
     } catch (error) {
-        console.error("ImagePicker Error: ", error);
-        Alert.alert('Error', 'Could not pick image. Please try again.');
+      console.error('Error picking image:', error);
     }
   };
 

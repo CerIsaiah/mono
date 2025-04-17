@@ -28,23 +28,19 @@ export default function ChooseContextScreen() {
 
   const handleNextPress = () => {
     if (selectedContext && imageUri) {
-      console.log('Selected Context:', selectedContext);
-      console.log('Image URI:', imageUri);
-      // Navigate to the swipes page, passing the context and image URI
       router.push({
         pathname: '/swipes-page',
         params: { 
-          context: selectedContext,
+          mode: 'image',
+          selectedMode: selectedContext,
           imageUri: imageUri 
         }
       });
     } else {
-      console.log('Please select a context or image URI missing');
       if (!imageUri) {
-          console.error("Image URI is missing!")
-          // Maybe show an alert or navigate back
+        console.error("Image URI is missing!");
+        router.back();
       }
-      // Optional: Show an alert if no context is selected
     }
   };
 

@@ -29,12 +29,8 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>com.googleusercontent.apps.776336590279-oe5g4kldq8hkc0bn052rs9k8f6eet900</string>
           <string>com.smoothrizz.app</string>
-        </array>
-      </dict>
-      <dict>
-        <key>CFBundleURLSchemes</key>
-        <array>
           <string>com.googleusercontent.apps.776336590279-oe5g4kldq8hkc0bn052rs9k8f6eet900</string>
         </array>
       </dict>
@@ -47,6 +43,10 @@
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>GOOGLE_APP_ID</key>
+    <string>1:776336590279:ios:ce5a62ea3bf08d0adf85e2</string>
+    <key>GOOGLE_SIGN_IN_CLIENT_ID</key>
+    <string>776336590279-oe5g4kldq8hkc0bn052rs9k8f6eet900.apps.googleusercontent.com</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>LSMinimumSystemVersion</key>
