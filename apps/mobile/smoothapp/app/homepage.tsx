@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert, ActivityIndicator, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // Assuming use of Expo icons
-import { useRouter } from 'expo-router'; // Import useRouter
+import { useRouter, useFocusEffect } from 'expo-router'; // Import useRouter and useFocusEffect
 import { useAuth } from '../src/context/AuthContext'; // Import useAuth
 
 // Define Colors
@@ -21,7 +21,7 @@ const COLORS = {
 // Add API base URL constant and Minimum Learning Percentage
 const API_BASE_URL = 'https://mono-production-8ef9.up.railway.app'; // Replace with your actual API URL or use env variables
 const MIN_LEARNING_PERCENTAGE = 10; // Or import from a shared constants file
-const SWIPES_PER_GIFT = 15; // Number of swipes needed to unlock a gift
+const SWIPES_PER_GIFT = 10; // Number of swipes needed to unlock a gift
 
 // Placeholder for user data - replace with actual data fetching
 const userName = 'Isaiah';
@@ -53,112 +53,101 @@ export default function HomeScreen() {
   const [giftScale] = useState(new Animated.Value(1));
   const [showGiftContent, setShowGiftContent] = useState(false);
 
-  // Fetch Learning Percentage and User Stats
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user?.email) {
-        console.log("No user email found, skipping data fetch.");
-        setIsFetchingPercentage(false);
-        setIsFetchingStats(false); // Also set stats loading to false
-        setMatchPercentage(MIN_LEARNING_PERCENTAGE); // Set default if no user
-        setBoostedConvos(0); // Default stats
-        setDaysActive(0); // Default stats
+  // Memoize the fetch function to prevent unnecessary recreations
+  const fetchUserData = useCallback(async () => {
+    if (!user?.email) {
+      console.log("No user email found, skipping data fetch.");
+      setIsFetchingPercentage(false);
+      setIsFetchingStats(false);
+      setMatchPercentage(MIN_LEARNING_PERCENTAGE);
+      setBoostedConvos(0);
+      setDaysActive(0);
+      setCurrentSwipes(0);
+      setNextGiftThreshold(SWIPES_PER_GIFT);
+      setIsGiftUnlocked(false);
+      setCurrentPickupLine('');
+      setShowGiftContent(false);
+      return;
+    }
+
+    setIsFetchingPercentage(true);
+    setIsFetchingStats(true);
+
+    try {
+      const headers: Record<string, string> = {
+        'x-user-email': user.email,
+        'X-Client-Type': 'mobile',
+      };
+
+      // Fetch both percentage and stats in parallel
+      const [percentageResponse, statsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/learning-percentage`, { headers }),
+        fetch(`${API_BASE_URL}/api/user-stats`, { headers })
+      ]);
+
+      // Handle percentage response
+      if (percentageResponse.ok) {
+        const percentageData = await percentageResponse.json();
+        setMatchPercentage(percentageData.percentage || MIN_LEARNING_PERCENTAGE);
+      } else {
+        console.error('Error fetching learning percentage:', percentageResponse.status);
+        setMatchPercentage(MIN_LEARNING_PERCENTAGE);
+      }
+
+      // Handle stats response
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        console.log("User stats data received:", statsData);
+        setBoostedConvos(statsData.boostedConvos || 0);
+        setDaysActive(statsData.daysActive || 0);
+        setCurrentSwipes(statsData.currentSwipes || 0);
+        
+        // Calculate next gift threshold
+        const nextThreshold = Math.ceil(statsData.currentSwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
+        setNextGiftThreshold(nextThreshold);
+        
+        // Check if gift is unlocked
+        const isUnlocked = statsData.currentSwipes >= nextThreshold;
+        setIsGiftUnlocked(isUnlocked);
+        
+        // Set pickup line
+        const giftIndex = Math.floor(statsData.currentSwipes / SWIPES_PER_GIFT) % PICKUP_LINES.length;
+        setCurrentPickupLine(PICKUP_LINES[giftIndex]);
+      } else {
+        console.error('Error fetching user stats:', statsResponse.status);
+        setBoostedConvos(0);
+        setDaysActive(0);
         setCurrentSwipes(0);
         setNextGiftThreshold(SWIPES_PER_GIFT);
         setIsGiftUnlocked(false);
         setCurrentPickupLine('');
-        setShowGiftContent(false);
-        return;
       }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      // Set default values on error
+      setMatchPercentage(MIN_LEARNING_PERCENTAGE);
+      setBoostedConvos(0);
+      setDaysActive(0);
+      setCurrentSwipes(0);
+      setNextGiftThreshold(SWIPES_PER_GIFT);
+      setIsGiftUnlocked(false);
+      setCurrentPickupLine('');
+    } finally {
+      setIsFetchingPercentage(false);
+      setIsFetchingStats(false);
+    }
+  }, [user?.email]);
 
-      setIsFetchingPercentage(true);
-      setIsFetchingStats(true);
-
-      // Fetch Percentage
-      try {
-        const headers: Record<string, string> = {
-          'x-user-email': user.email,
-          'X-Client-Type': 'mobile', // Added client type header
-        };
-
-        console.log(`Fetching learning percentage for ${user.email}...`);
-        const percentageResponse = await fetch(`${API_BASE_URL}/api/learning-percentage`, { headers });
-
-        if (!percentageResponse.ok) {
-          const errorText = await percentageResponse.text();
-          console.error('Error fetching learning percentage:', percentageResponse.status, errorText);
-          // Don't throw here, let it fallback to default, but log error
-          setMatchPercentage(MIN_LEARNING_PERCENTAGE);
-        } else {
-          const percentageData = await percentageResponse.json();
-          console.log("Learning percentage data received:", percentageData);
-          setMatchPercentage(percentageData.percentage || MIN_LEARNING_PERCENTAGE);
-        }
-      } catch (error) {
-        console.error('Error fetching learning percentage:', error);
-        setMatchPercentage(MIN_LEARNING_PERCENTAGE); // Set default on error
-      } finally {
-        setIsFetchingPercentage(false);
-      }
-
-      // Fetch User Stats (Boosted Convos, Days Active)
-      try {
-         const headers: Record<string, string> = {
-           'x-user-email': user.email,
-           'X-Client-Type': 'mobile', // Added client type header
-         };
-         console.log(`Fetching user stats for ${user.email}...`);
-         // Assuming a new endpoint: GET /api/user-stats
-         // This endpoint needs to be created on your backend.
-         const statsResponse = await fetch(`${API_BASE_URL}/api/user-stats`, { headers });
-
-         if (!statsResponse.ok) {
-           const errorText = await statsResponse.text();
-           console.error('Error fetching user stats:', statsResponse.status, errorText);
-           // Fallback to 0 if stats fetch fails
-           setBoostedConvos(0);
-           setDaysActive(0);
-           setCurrentSwipes(0);
-           setNextGiftThreshold(SWIPES_PER_GIFT);
-           setIsGiftUnlocked(false);
-           setCurrentPickupLine('');
-           setShowGiftContent(false);
-         } else {
-            const statsData = await statsResponse.json();
-            console.log("User stats data received:", statsData);
-            setBoostedConvos(statsData.boostedConvos || 0);
-            setDaysActive(statsData.daysActive || 0);
-            setCurrentSwipes(statsData.currentSwipes || 0);
-            
-            // Calculate next gift threshold
-            const nextThreshold = Math.ceil(statsData.currentSwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
-            setNextGiftThreshold(nextThreshold);
-            
-            // Check if gift is unlocked
-            const isUnlocked = statsData.currentSwipes >= nextThreshold;
-            setIsGiftUnlocked(isUnlocked);
-            
-            // Set pickup line
-            const giftIndex = Math.floor(statsData.currentSwipes / SWIPES_PER_GIFT) % PICKUP_LINES.length;
-            setCurrentPickupLine(PICKUP_LINES[giftIndex]);
-         }
-      } catch (error) {
-         console.error('Error fetching user stats:', error);
-         // Fallback to 0 on error
-         setBoostedConvos(0);
-         setDaysActive(0);
-         setCurrentSwipes(0);
-         setNextGiftThreshold(SWIPES_PER_GIFT);
-         setIsGiftUnlocked(false);
-         setCurrentPickupLine('');
-         setShowGiftContent(false);
-      } finally {
-          setIsFetchingStats(false);
-      }
-    };
-
-    fetchData();
-  }, [user?.email]); // Re-run effect if user email changes
+  // Use useFocusEffect to refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log("Screen focused, fetching fresh data...");
+      fetchUserData();
+      
+      // Optional: Reset gift state when screen comes into focus
+      setShowGiftContent(false);
+    }, [fetchUserData])
+  );
 
   const handleUploadPress = () => {
     router.push('/upload'); // Navigate to the upload screen
@@ -271,7 +260,10 @@ export default function HomeScreen() {
                     <Text style={[styles.swipeGoalText, { fontSize: 32 }]}> / {SWIPES_PER_GIFT}</Text>
                   </Text>
                   <Text style={styles.swipesLeftText}>
-                    {SWIPES_PER_GIFT - (currentSwipes % SWIPES_PER_GIFT)} swipes to gift
+                    {SWIPES_PER_GIFT - (currentSwipes % SWIPES_PER_GIFT)} daily swipes to gift
+                  </Text>
+                  <Text style={styles.swipesResetText}>
+                    Resets at midnight
                   </Text>
                 </View>
               </>
@@ -613,6 +605,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     opacity: 0.9,
     letterSpacing: 0.3,
+  },
+  swipesResetText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+    fontWeight: '400',
+    opacity: 0.7,
+    fontStyle: 'italic',
   },
   tapToOpenText: {
     fontSize: 18,

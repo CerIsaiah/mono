@@ -77,7 +77,7 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
         // Get user data including total usage
         const { data: userData, error: fetchError } = await supabase
             .from('users')
-            .select('copy_count, login_timestamps, total_usage')
+            .select('copy_count, login_timestamps, daily_usage')
             .eq('email', userEmail)
             .maybeSingle();
 
@@ -103,7 +103,7 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
         }
 
         const boostedConvos = userData.copy_count || 0;
-        const totalSwipes = userData.total_usage || 0;
+        const dailySwipes = userData.daily_usage || 0;
 
         // Calculate unique days active
         let daysActive = 0;
@@ -125,15 +125,15 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive = uniqueDays.size;
         }
 
-        // Calculate next gift threshold and current pickup line
-        const nextGiftThreshold = Math.ceil(totalSwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
-        const pickupLineIndex = Math.floor(totalSwipes / SWIPES_PER_GIFT) % PICKUP_LINES.length;
+        // Calculate next gift threshold and current pickup line based on daily swipes
+        const nextGiftThreshold = Math.ceil(dailySwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
+        const pickupLineIndex = Math.floor(dailySwipes / SWIPES_PER_GIFT) % PICKUP_LINES.length;
 
         logger.info('Successfully fetched user stats', { 
             email: userEmail, 
             boostedConvos, 
             daysActive,
-            totalSwipes,
+            dailySwipes,
             nextGiftThreshold,
             pickupLineIndex
         });
@@ -141,7 +141,7 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
         res.status(200).json({ 
             boostedConvos, 
             daysActive,
-            currentSwipes: totalSwipes,
+            currentSwipes: dailySwipes,
             nextGiftThreshold,
             currentPickupLine: PICKUP_LINES[pickupLineIndex]
         });
