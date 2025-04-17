@@ -267,7 +267,7 @@ router.post('/rate-image', async (req, res) => {
     const response = await openai.chat.completions.create({
       model: 'o4-mini-2025-04-16',
       messages,
-      temperature: 0.5,
+      temperature: 1,
       max_completion_tokens: 150
     });
 
