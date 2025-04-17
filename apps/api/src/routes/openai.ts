@@ -253,7 +253,7 @@ router.post('/rate-image', async (req, res) => {
     const messages: any[] = [
       {
         role: 'system',
-        content: 'You are a helpful assistant. Rate the following image on a scale from 1 (worst) to 10 (best) and give a brief explanation.'
+        content: 'You are a helpful assistant. Rate the following image on a scale from 1 (worst) to 10 (best) and give a brief explanation. For tinder'
       },
       {
         role: 'user',
@@ -268,7 +268,7 @@ router.post('/rate-image', async (req, res) => {
       model: 'o4-mini-2025-04-16',
       messages,
       temperature: 0.5,
-      max_tokens: 150
+      max_completion_tokens: 150
     });
 
     const message = response.choices[0].message;
