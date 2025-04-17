@@ -60,6 +60,8 @@ export default function HomeScreen() {
   const [selectedMode, setSelectedMode] = useState<string>('first-move');
   const [showModeSelection, setShowModeSelection] = useState(false);
   const [spicyLevel, setSpicyLevel] = useState(50);
+  const [isGiftCooldown, setIsGiftCooldown] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
 
   // Fetch user data - Define before use in useFocusEffect
   const fetchUserData = useCallback(async () => {
@@ -273,27 +275,99 @@ export default function HomeScreen() {
     ]).start();
   };
 
-  // Update the gift reveal animation to use user-stats endpoint
-  const animateGiftReveal = () => {
+  // Add debug logging for gift state
+  useEffect(() => {
+    console.log('Gift State Debug:', {
+      showGiftContent,
+      currentPickupLine,
+      hasSeenCurrentGift,
+      isAnimating,
+      isGiftCooldown,
+      unclaimedGifts,
+      completedGifts
+    });
+  }, [showGiftContent, currentPickupLine, hasSeenCurrentGift, isAnimating, isGiftCooldown, unclaimedGifts, completedGifts]);
+
+  // Add reset mechanism
+  const resetGiftState = () => {
+    setShowGiftContent(false);
+    setHasSeenCurrentGift(false);
+    setCurrentPickupLine(null);
+    setGiftTaps(0);
+    setIsAnimating(false);
+    setIsGiftCooldown(false);
+    giftRotation.setValue(0);
+    giftScale.setValue(1);
+    circleScale.setValue(1);
+    glowOpacity.setValue(0.2);
+    glowRadius.setValue(2);
+  };
+
+  // Update the gift reveal animation
+  const animateGiftReveal = async () => {
+    // Reset state before starting new animation
+    resetGiftState();
+    setIsAnimating(true);
+    
+    // Fetch the data first but don't show it yet
+    let newPickupLine = null;
+    let success = false;
+
+    try {
+      if (!user?.email) {
+        console.log('No user email, aborting gift reveal');
+        setIsAnimating(false);
+        return;
+      }
+
+      const headers: Record<string, string> = {
+        'x-user-email': user.email,
+        'X-Client-Type': 'mobile',
+      };
+
+      console.log('Fetching new pickup line...');
+      const response = await fetch(`${API_BASE_URL}/api/user-stats`, { headers });
+      
+      if (response.ok) {
+        const statsData = await response.json();
+        console.log('Stats response:', statsData);
+        if (statsData.currentPickupLine) {
+          newPickupLine = statsData.currentPickupLine;
+          success = true;
+          console.log('Got new pickup line:', newPickupLine);
+        } else {
+          console.log('No pickup line in response');
+        }
+      } else {
+        console.log('Failed to fetch stats:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching pickup line:', error);
+      setIsAnimating(false);
+      return;
+    }
+
+    // Start the animation sequence
+    console.log('Starting animation sequence...');
     Animated.sequence([
       // Spin and scale up
       Animated.parallel([
         Animated.timing(giftRotation, {
           toValue: 4,
-          duration: 1200,
+          duration: 1000,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(giftScale, {
           toValue: 2.5,
-          duration: 600,
+          duration: 800,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         // Scale circle back down
         Animated.timing(circleScale, {
           toValue: 1,
-          duration: 600,
+          duration: 800,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -305,73 +379,56 @@ export default function HomeScreen() {
         tension: 40,
         useNativeDriver: true,
       }),
-    ]).start(async () => {
-      try {
-        if (!user?.email) return;
-
-        // Get new pickup line by fetching updated stats
-        const headers: Record<string, string> = {
-          'x-user-email': user.email,
-          'X-Client-Type': 'mobile',
-        };
-
-        const response = await fetch(`${API_BASE_URL}/api/user-stats`, { headers });
+    ]).start(async ({ finished }) => {
+      console.log('Animation finished:', { finished, success, newPickupLine });
+      // Animation has finished, now show the pickup line
+      if (finished && success && newPickupLine) {
+        setCurrentPickupLine(newPickupLine);
+        setShowGiftContent(true);
+        setHasSeenCurrentGift(true);
+        setUnclaimedGifts(prev => Math.max(0, prev - 1));
+        setCompletedGifts(prev => prev + 1);
         
-        if (!response.ok) {
-          console.error('Failed to get stats');
-          setShowGiftContent(false);
-          setHasSeenCurrentGift(false);
-          return;
-        }
-
-        const statsData = await response.json();
-        
-        if (statsData.currentPickupLine) {
-          setCurrentPickupLine(statsData.currentPickupLine);
-          setShowGiftContent(true);
-          setHasSeenCurrentGift(true);
-          setUnclaimedGifts(prev => Math.max(0, prev - 1));
-          setCompletedGifts(prev => prev + 1);
-          
-          await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
-            showGiftContent: true
-          }));
-          
-          // Fetch new data if this was the last gift
-          if (unclaimedGifts <= 1) {
-            fetchUserData();
+        if (user?.email) {
+          try {
+            await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
+              showGiftContent: true,
+              currentPickupLine: newPickupLine
+            }));
+          } catch (error) {
+            console.error('Error saving gift state:', error);
           }
-        } else {
-          console.error('No pickup line available');
-          setShowGiftContent(false);
-          setHasSeenCurrentGift(false);
         }
-      } catch (error) {
-        console.error('Error in gift reveal:', error);
-        setShowGiftContent(false);
-        setHasSeenCurrentGift(false);
-      } finally {
-        setGiftTaps(0);
-        giftRotation.setValue(0);
-        giftScale.setValue(1);
-        circleScale.setValue(1);
-        glowOpacity.setValue(0.2);
-        glowRadius.setValue(2);
+        
+        // Fetch new data if this was the last gift
+        if (unclaimedGifts <= 1) {
+          fetchUserData();
+        }
+
+        // Set cooldown period
+        setIsGiftCooldown(true);
+        setTimeout(() => {
+          setIsGiftCooldown(false);
+        }, 2000); // 2 second cooldown
+      } else {
+        console.log('Failed to show pickup line, resetting state');
+        resetGiftState();
       }
+      setIsAnimating(false);
     });
 
-    // JS driver animations (intense glow during reveal)
+    // Glow animation
     Animated.sequence([
       Animated.parallel([
         Animated.timing(glowOpacity, {
           toValue: 0.8,
-          duration: 600,
+          duration: 800,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: false,
         }),
         Animated.timing(glowRadius, {
           toValue: 25,
-          duration: 600,
+          duration: 800,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: false,
         }),
@@ -462,10 +519,12 @@ export default function HomeScreen() {
       unclaimedGifts,
       giftTaps,
       isGiftUnlocked,
-      hasGiftAvailable: giftProgress.hasGiftAvailable
+      hasGiftAvailable: giftProgress.hasGiftAvailable,
+      isGiftCooldown,
+      isAnimating
     });
     
-    if (giftProgress.hasGiftAvailable) {
+    if (giftProgress.hasGiftAvailable && !isGiftCooldown && !isAnimating) {
       if (giftTaps < 4) {
         setGiftTaps(prev => prev + 1);
         animateGiftTap();
@@ -594,7 +653,7 @@ export default function HomeScreen() {
             {/* Content */}
             <TouchableOpacity 
               onPress={handleGiftPress}
-              disabled={isFetchingStats || !calculateGiftProgress().hasGiftAvailable}
+              disabled={isFetchingStats || !calculateGiftProgress().hasGiftAvailable || isAnimating || isGiftCooldown}
               style={StyleSheet.absoluteFill}
             >
               <Animated.View style={[styles.progressContent, {
@@ -610,7 +669,7 @@ export default function HomeScreen() {
                     <>
                       <Ionicons name="gift" size={52} color={COLORS.gold} />
                       <Text style={styles.tapToOpenText}>
-                        {giftTaps === 0 ? "Tap to charge your gift!" : "Keep tapping!"}
+                        {giftTaps === 0 ? "Tap to charge!" : "Keep tapping!"}
                       </Text>
                     </>
                   ) : (
@@ -1109,7 +1168,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   tapToOpenText: {
-    fontSize: 18,
+    fontSize: 16,
     color: COLORS.primaryPink,
     marginTop: 10,
     fontWeight: '600',
