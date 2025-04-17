@@ -271,8 +271,19 @@ router.post('/rate-image', async (req, res) => {
       max_completion_tokens: 150
     });
 
+    // Log the full choice object for debugging
+    logger.info('OpenAI Image Rating Choice:', { choice: response.choices[0], requestId: crypto.randomUUID() });
+
     const message = response.choices[0].message;
-    if (!message.content) throw new Error('No content received from OpenAI');
+    if (!message.content) {
+      // Include finish_reason in the error for better diagnosis
+      const finishReason = response.choices[0].finish_reason;
+      logger.error('No content received from OpenAI', { 
+        finish_reason: finishReason,
+        requestId: crypto.randomUUID()
+      });
+      throw new Error(`No content received from OpenAI. Finish reason: ${finishReason}`);
+    }
 
     return res.json({ rating: message.content, requestId: crypto.randomUUID() });
   } catch (error: any) {
