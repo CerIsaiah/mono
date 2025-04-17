@@ -115,7 +115,7 @@ export default function ImageRatingScreen() {
 
                         try {
                             const imagesBase64 = selectedImages.map(img => img.base64);
-                            const endpoint = `${API_URL}/rate-multiple-images`; // Corrected endpoint path
+                            const endpoint = `${API_URL}/api/rate-multiple-images`; // Correct endpoint
                             console.log(`Sending ${imagesBase64.length} images to ${endpoint} using fetch`);
 
                             const response = await fetch(endpoint, {

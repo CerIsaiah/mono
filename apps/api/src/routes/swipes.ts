@@ -65,38 +65,31 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
     
-    // 1. Check usage limits *once*
+    // Check usage limits
     const initialLimits = await checkUsageLimits(identifier, isEmail);
     if (!initialLimits.canSwipe) {
-      // If they can't swipe initially, return the limits immediately
       return res.json(initialLimits);
     }
     
-    // 2. If they can swipe, attempt atomic increment
+    // Increment usage (this also updates total_usage)
     const incrementResult = await incrementUsage(identifier, isEmail);
     
-    // 3. Handle increment result
     if (incrementResult.error) {
-      // If increment failed (e.g., user not found error during RPC), return 500
       logger.error('Swipe increment failed after check', { 
           identifier, 
           isEmail, 
           error: incrementResult.error 
       });
-      // Return the initial limits check, but add the error message
       return res.status(500).json({ 
           ...initialLimits, 
           error: `Swipe count failed: ${incrementResult.error}` 
       }); 
     }
 
-    // 4. Construct response with initial checks and *new* swipe count
     const finalResponse = {
-        ...initialLimits, // Use data from the initial check (isPremium, isTrial etc.)
-        dailySwipes: incrementResult.dailySwipes, // Use the updated count from increment
-        // Recalculate canSwipe based on the *new* count and initial premium/trial status
+        ...initialLimits,
+        dailySwipes: incrementResult.dailySwipes,
         canSwipe: initialLimits.isPremium || initialLimits.isTrial || incrementResult.dailySwipes < (isEmail ? FREE_USER_DAILY_LIMIT : ANONYMOUS_USAGE_LIMIT),
-        // Optionally recalculate requiresUpgrade/requiresSignIn
         requiresUpgrade: isEmail && !initialLimits.isPremium && !initialLimits.isTrial && incrementResult.dailySwipes >= FREE_USER_DAILY_LIMIT,
         requiresSignIn: !isEmail && incrementResult.dailySwipes >= ANONYMOUS_USAGE_LIMIT
     };
@@ -104,7 +97,6 @@ router.post('/', async (req: Request, res: Response) => {
     res.json(finalResponse);
 
   } catch (error: any) {
-    // Catch errors from initial checkUsageLimits or unexpected errors
     logger.error('Error in POST /api/swipes:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }

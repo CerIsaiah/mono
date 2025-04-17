@@ -4,6 +4,17 @@ import { logger } from '../utils/logger';
 
 const router: Router = express.Router();
 
+// Sample pickup lines array (in production, these should be in the database)
+const PICKUP_LINES = [
+    "Are you French? Because Eiffel for you.",
+    "Are you a magician? Because whenever I look at you, everyone else disappears.",
+    "Do you have a map? I keep getting lost in your eyes.",
+    "Are you a camera? Because every time I look at you, I smile.",
+    "Is your name Google? Because you've got everything I've been searching for.",
+];
+
+const SWIPES_PER_GIFT = 15;
+
 // Middleware to check for user email in header
 const authenticateUser = (req: Request, res: Response, next: NextFunction) => {
     const userEmail = req.headers['x-user-email'] as string;
@@ -63,11 +74,12 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
     const supabase = getSupabaseClient();
 
     try {
+        // Get user data including total usage
         const { data: userData, error: fetchError } = await supabase
             .from('users')
-            .select('copy_count, login_timestamps') // Select the required fields
+            .select('copy_count, login_timestamps, total_usage')
             .eq('email', userEmail)
-            .maybeSingle(); // Use maybeSingle to handle user not found gracefully
+            .maybeSingle();
 
         if (fetchError) {
             logger.error('Error fetching user stats', {
@@ -81,10 +93,17 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
         if (!userData) {
             logger.warn('User not found for stats request', { email: userEmail });
             // Return default stats if user not found
-            return res.status(200).json({ boostedConvos: 0, daysActive: 0 });
+            return res.status(200).json({ 
+                boostedConvos: 0, 
+                daysActive: 0,
+                currentSwipes: 0,
+                nextGiftThreshold: SWIPES_PER_GIFT,
+                currentPickupLine: PICKUP_LINES[0]
+            });
         }
 
         const boostedConvos = userData.copy_count || 0;
+        const totalSwipes = userData.total_usage || 0;
 
         // Calculate unique days active
         let daysActive = 0;
@@ -92,27 +111,40 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             const uniqueDays = new Set<string>();
             userData.login_timestamps.forEach((timestamp: string | number | Date) => {
                 try {
-                    // Convert timestamp to YYYY-MM-DD format in UTC to avoid timezone issues
                     const date = new Date(timestamp);
-                    if (!isNaN(date.getTime())) { // Check if the date is valid
-                       const year = date.getUTCFullYear();
-                       const month = (date.getUTCMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
-                       const day = date.getUTCDate().toString().padStart(2, '0');
-                       uniqueDays.add(`${year}-${month}-${day}`);
-                    } else {
-                         logger.warn('Invalid timestamp found in login_timestamps array', { email: userEmail, timestamp });
+                    if (!isNaN(date.getTime())) {
+                        const year = date.getUTCFullYear();
+                        const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                        const day = date.getUTCDate().toString().padStart(2, '0');
+                        uniqueDays.add(`${year}-${month}-${day}`);
                     }
                 } catch (parseError: any) {
-                     logger.error('Error parsing timestamp in login_timestamps array', { email: userEmail, timestamp, error: parseError.message });
+                    logger.error('Error parsing timestamp', { email: userEmail, timestamp, error: parseError.message });
                 }
             });
             daysActive = uniqueDays.size;
-        } else {
-             logger.warn('login_timestamps field is missing or not an array', { email: userEmail });
         }
 
-        logger.info('Successfully fetched user stats', { email: userEmail, boostedConvos, daysActive });
-        res.status(200).json({ boostedConvos, daysActive });
+        // Calculate next gift threshold and current pickup line
+        const nextGiftThreshold = Math.ceil(totalSwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
+        const pickupLineIndex = Math.floor(totalSwipes / SWIPES_PER_GIFT) % PICKUP_LINES.length;
+
+        logger.info('Successfully fetched user stats', { 
+            email: userEmail, 
+            boostedConvos, 
+            daysActive,
+            totalSwipes,
+            nextGiftThreshold,
+            pickupLineIndex
+        });
+
+        res.status(200).json({ 
+            boostedConvos, 
+            daysActive,
+            currentSwipes: totalSwipes,
+            nextGiftThreshold,
+            currentPickupLine: PICKUP_LINES[pickupLineIndex]
+        });
 
     } catch (error: any) {
         logger.error('Error fetching user stats', {
