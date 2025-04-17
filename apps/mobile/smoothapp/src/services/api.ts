@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { OpenAIRequest, OpenAIResponse } from '../types/types';
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const API_URL = 'https://mono-production-8ef9.up.railway.app';
 
 const api = axios.create({
   baseURL: API_URL,

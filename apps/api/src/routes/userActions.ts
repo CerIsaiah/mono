@@ -120,72 +120,53 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
 
         // Calculate next gift threshold based on daily swipes
         const nextGiftThreshold = Math.ceil(dailySwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
-        const completedGifts = Math.floor(dailySwipes / SWIPES_PER_GIFT);
+        const completedGifts = seenPickupLines.length;
+        const totalAvailableGifts = Math.floor(dailySwipes / SWIPES_PER_GIFT);
         
         // Get all pickup lines from the database
-        const { data: allPickupLines, error: allLinesError } = await supabase
+        let query = supabase
             .from('pickup_lines')
-            .select('id, line, times_used')
-            .eq('is_active', true)
-            .order('id');
+            .select('id, line')
+            .eq('is_active', true);
             
-        if (allLinesError) {
+        // Only add the not-in condition if there are seen pickup lines
+        if (seenPickupLines.length > 0) {
+            query = query.not('id', 'in', `(${seenPickupLines.join(',')})`);
+        }
+        
+        const { data: availableLines, error: linesError } = await query;
+
+        if (linesError) {
             logger.error('Error fetching pickup lines', {
                 email: userEmail,
-                error: allLinesError.message,
-                stack: allLinesError.stack
+                error: linesError.message,
+                stack: linesError.stack
             });
             return res.status(500).json({ error: 'Failed to fetch pickup lines' });
         }
         
-        // Select a pickup line based on completed gifts and tracking
-        let currentLineId = null;
+        // Select a random pickup line if we have unclaimed gifts
         let currentLineText = null;
         let hasSeenCurrentGift = false;
         
-        if (allPickupLines && allPickupLines.length > 0 && completedGifts > 0) {
-            // Calculate which pickup line to show based on completed gifts
-            const lineIndex = (completedGifts - 1) % allPickupLines.length;
-            const selectedLine = allPickupLines[lineIndex];
+        if (availableLines && availableLines.length > 0 && totalAvailableGifts > completedGifts) {
+            const selectedLine = availableLines[Math.floor(Math.random() * availableLines.length)];
+            currentLineText = selectedLine.line;
             
-            if (selectedLine) {
-                currentLineId = selectedLine.id;
-                currentLineText = selectedLine.line;
-                hasSeenCurrentGift = seenPickupLines.includes(currentLineId);
-                
-                // Update seen pickup lines if not already seen
-                if (!hasSeenCurrentGift) {
-                    // Mark this pickup line as seen by adding it to the user's seen_pickup_lines array
-                    const updatedSeenLines = [...seenPickupLines, currentLineId];
-                    
-                    const { error: updateError } = await supabase
-                        .from('users')
-                        .update({ seen_pickup_lines: updatedSeenLines })
-                        .eq('email', userEmail);
+            // Update seen pickup lines
+            const updatedSeenLines = [...seenPickupLines, selectedLine.id];
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({ seen_pickup_lines: updatedSeenLines })
+                .eq('email', userEmail);
 
-                    if (updateError) {
-                        logger.error('Error updating seen pickup lines', {
-                            email: userEmail,
-                            lineId: currentLineId,
-                            error: updateError.message,
-                            stack: updateError.stack
-                        });
-                    } else {
-                        // Also increment the times_used counter for this pickup line
-                        const { error: incrementError } = await supabase
-                            .from('pickup_lines')
-                            .update({ times_used: selectedLine.times_used + 1 })
-                            .eq('id', currentLineId);
-
-                        if (incrementError) {
-                            logger.error('Error incrementing pickup line usage', {
-                                lineId: currentLineId,
-                                error: incrementError.message,
-                                stack: incrementError.stack
-                            });
-                        }
-                    }
-                }
+            if (updateError) {
+                logger.error('Error updating seen pickup lines', {
+                    email: userEmail,
+                    lineId: selectedLine.id,
+                    error: updateError.message,
+                    stack: updateError.stack
+                });
             }
         }
 
@@ -195,8 +176,9 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive,
             dailySwipes,
             nextGiftThreshold,
-            currentLineId,
-            hasSeenCurrentGift
+            hasSeenCurrentGift,
+            completedGifts,
+            totalAvailableGifts
         });
 
         res.status(200).json({ 
@@ -206,7 +188,8 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             nextGiftThreshold,
             currentPickupLine: currentLineText,
             hasSeenCurrentGift,
-            completedGifts
+            completedGifts,
+            totalAvailableGifts
         });
 
     } catch (error: any) {
@@ -250,6 +233,116 @@ router.post('/reset-daily-swipes', authenticateUser, async (req: Request, res: R
             stack: error.stack
         });
         res.status(500).json({ error: 'Internal server error while resetting swipes' });
+    }
+});
+
+// POST /api/get-next-pickup-line
+router.post('/get-next-pickup-line', authenticateUser, async (req: Request, res: Response) => {
+    const userEmail = (req as any).userEmail;
+    const supabase = getSupabaseClient();
+
+    try {
+        // Get user data including seen pickup lines
+        const { data: userData, error: fetchError } = await supabase
+            .from('users')
+            .select('daily_usage, seen_pickup_lines')
+            .eq('email', userEmail)
+            .single();
+
+        if (fetchError) {
+            logger.error('Error fetching user data for pickup line', {
+                email: userEmail,
+                error: fetchError.message
+            });
+            return res.status(500).json({ error: 'Failed to fetch user data' });
+        }
+
+        if (!userData) {
+            logger.warn('User not found for pickup line request', { email: userEmail });
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const seenPickupLines = userData.seen_pickup_lines || [];
+        const totalAvailableGifts = Math.floor(userData.daily_usage / SWIPES_PER_GIFT);
+
+        // Only proceed if user has unclaimed gifts
+        if (seenPickupLines.length >= totalAvailableGifts) {
+            logger.warn('No unclaimed gifts available', {
+                email: userEmail,
+                seenCount: seenPickupLines.length,
+                totalAvailable: totalAvailableGifts
+            });
+            return res.status(400).json({ error: 'No unclaimed gifts available' });
+        }
+
+        // Get all pickup lines
+        let query = supabase
+            .from('pickup_lines')
+            .select('id, line')
+            .eq('is_active', true);
+        
+        // Only add the not-in condition if there are seen pickup lines
+        if (seenPickupLines.length > 0) {
+            query = query.not('id', 'in', `(${seenPickupLines.join(',')})`);
+        }
+        
+        const { data: availableLines, error: linesError } = await query.order('id');
+
+        if (linesError) {
+            logger.error('Error fetching pickup lines', {
+                email: userEmail,
+                error: linesError.message
+            });
+            return res.status(500).json({ error: 'Failed to fetch pickup lines' });
+        }
+
+        if (!availableLines || availableLines.length === 0) {
+            logger.error('No pickup lines available', {
+                email: userEmail,
+                seenCount: seenPickupLines.length
+            });
+            return res.status(500).json({ error: 'No pickup lines available' });
+        }
+
+        // Select a random pickup line from available ones
+        const selectedLine = availableLines[Math.floor(Math.random() * availableLines.length)];
+
+        // Add this line to user's seen pickup lines
+        const updatedSeenLines = [...seenPickupLines, selectedLine.id];
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ seen_pickup_lines: updatedSeenLines })
+            .eq('email', userEmail);
+
+        if (updateError) {
+            logger.error('Error updating seen pickup lines', {
+                email: userEmail,
+                error: updateError.message
+            });
+            return res.status(500).json({ error: 'Failed to update seen pickup lines' });
+        }
+
+        logger.info('Successfully provided new pickup line', {
+            email: userEmail,
+            lineId: selectedLine.id,
+            seenCount: updatedSeenLines.length,
+            totalAvailable: totalAvailableGifts
+        });
+
+        res.json({
+            success: true,
+            pickupLine: selectedLine.line,
+            completedGifts: updatedSeenLines.length,
+            totalAvailableGifts
+        });
+
+    } catch (error: any) {
+        logger.error('Error getting next pickup line', {
+            email: userEmail,
+            error: error.message,
+            stack: error.stack
+        });
+        res.status(500).json({ error: 'Internal server error while getting pickup line' });
     }
 });
 
