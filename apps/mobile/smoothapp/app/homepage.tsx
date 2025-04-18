@@ -51,6 +51,15 @@ const userName = 'Isaiah';
 // Define Icon type for safety
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
+// Define Gift Progress Type
+interface GiftProgress {
+    currentProgress: number;
+    remainingSwipes: number;
+    earnedGiftsToday: number;
+    dailyCompletedGifts: number;
+    hasGiftAvailable: boolean;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const pathname = usePathname(); // Correctly get pathname
@@ -65,8 +74,9 @@ export default function HomeScreen() {
   const [isGiftUnlocked, setIsGiftUnlocked] = useState(false);
   const [currentPickupLine, setCurrentPickupLine] = useState<string | null>(null);
   const [hasSeenCurrentGift, setHasSeenCurrentGift] = useState(false);
-  const [completedGifts, setCompletedGifts] = useState(0);
-  const [unclaimedGifts, setUnclaimedGifts] = useState(0);
+  const [dailyCompletedGifts, setDailyCompletedGifts] = useState(0); // Track daily completions
+  const [earnedGiftsToday, setEarnedGiftsToday] = useState(0); // Track daily earned
+  const [unclaimedGifts, setUnclaimedGifts] = useState(0); // Represents dailyUnclaimed = earnedToday - dailyCompleted
   const [giftBounce] = useState(new Animated.Value(0)); // Keep bounce for idle
   const [showGiftContent, setShowGiftContent] = useState(false);
   const [isResettingSwipes, setIsResettingSwipes] = useState(false);
@@ -130,7 +140,8 @@ export default function HomeScreen() {
       resetGiftState();
       setCurrentSwipes(0);
       setNextGiftThreshold(SWIPES_PER_GIFT);
-      setCompletedGifts(0);
+      setDailyCompletedGifts(0);
+      setEarnedGiftsToday(0);
       setUnclaimedGifts(0);
       return;
     }
@@ -151,56 +162,43 @@ export default function HomeScreen() {
 
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
-        console.log('Stats response:', statsData);
+        console.log('Stats response received:', statsData);
 
-        const currentSwipesCount = statsData.dailySwipes || 0; // Use dailySwipes from backend log
-        const completedGiftsCount = statsData.completedGifts || 0;
-        // Removed reliance on backend's totalAvailableGifts for this calculation
+        const currentSwipesCount = statsData.currentSwipes || 0;
+        const earnedToday = statsData.earnedGiftsToday || 0;
+        const dailyCompleted = statsData.dailyCompletedGifts || 0;
+        const dailyUnclaimed = Math.max(0, earnedToday - dailyCompleted);
 
-        // Calculate earned gifts based *only* on current swipes
-        const earnedGiftsBasedOnSwipes = Math.floor(currentSwipesCount / SWIPES_PER_GIFT);
-
-        // Calculate unclaimed gifts based on earned vs completed
-        const unclaimedCount = Math.max(0, earnedGiftsBasedOnSwipes - completedGiftsCount);
-
-        console.log('Gift Debug (Corrected Calculation):', {
+        console.log('Gift Debug (Daily Logic):', {
           currentSwipes: currentSwipesCount,
-          completedGifts: completedGiftsCount,
-          earnedBasedOnSwipes: earnedGiftsBasedOnSwipes,
-          unclaimedCalculated: unclaimedCount,
-          backendNextThreshold: statsData.nextGiftThreshold, // Log backend value
-          hasPickupLine: !!statsData.currentPickupLine
+          earnedToday,
+          dailyCompleted,
+          dailyUnclaimedCalculated: dailyUnclaimed
         });
 
-        // Always reset state first
+        // Reset state before setting new values
         resetGiftState();
-        
+
         setBoostedConvos(statsData.boostedConvos || 0);
         setDaysActive(statsData.daysActive || 0);
         setCurrentSwipes(currentSwipesCount);
-        setCompletedGifts(completedGiftsCount);
-        setUnclaimedGifts(unclaimedCount);
-        
-        // Set next threshold based on current swipes
-        const nextThreshold = statsData.nextGiftThreshold || ((Math.floor(currentSwipesCount / SWIPES_PER_GIFT) + 1) * SWIPES_PER_GIFT);
-        setNextGiftThreshold(nextThreshold);
-        
-        // Set gift availability based on unclaimed gifts
-        const shouldShowGift = unclaimedCount > 0 && completedGiftsCount < currentSwipesCount;
-        setIsGiftUnlocked(shouldShowGift);
+        setEarnedGiftsToday(earnedToday);
+        setDailyCompletedGifts(dailyCompleted);
+        setUnclaimedGifts(dailyUnclaimed); // Set unclaimed based on daily calculation
 
-        // Only show pickup line if we have unclaimed gifts
-        if (shouldShowGift && statsData.currentPickupLine) {
-          setCurrentPickupLine(statsData.currentPickupLine);
-          setShowGiftContent(true);
-          setHasSeenCurrentGift(statsData.hasSeenCurrentGift || false);
-        }
+        // Determine if a gift *might* be available visually
+        // The actual check happens on press via /get-next-pickup-line
+        setIsGiftUnlocked(dailyUnclaimed > 0);
+
+        // Removed automatic pickup line setting from here
+
       } else {
         console.error('Failed to fetch stats:', statsResponse.status);
         resetGiftState();
         setCurrentSwipes(0);
         setNextGiftThreshold(SWIPES_PER_GIFT);
-        setCompletedGifts(0);
+        setDailyCompletedGifts(0);
+        setEarnedGiftsToday(0);
         setUnclaimedGifts(0);
       }
     } catch (error: any) {
@@ -208,7 +206,8 @@ export default function HomeScreen() {
       resetGiftState();
       setCurrentSwipes(0);
       setNextGiftThreshold(SWIPES_PER_GIFT);
-      setCompletedGifts(0);
+      setDailyCompletedGifts(0);
+      setEarnedGiftsToday(0);
       setUnclaimedGifts(0);
     } finally {
       setIsFetchingPercentage(false);
@@ -245,7 +244,8 @@ export default function HomeScreen() {
       resetGiftState();
       setCurrentSwipes(0);
       setNextGiftThreshold(SWIPES_PER_GIFT);
-      setCompletedGifts(0);
+      setDailyCompletedGifts(0);
+      setEarnedGiftsToday(0);
       setUnclaimedGifts(0);
       
       // Then fetch fresh data
@@ -370,9 +370,10 @@ export default function HomeScreen() {
       isAnimating,
       isGiftCooldown,
       unclaimedGifts,
-      completedGifts
+      dailyCompletedGifts,
+      earnedGiftsToday
     });
-  }, [showGiftContent, currentPickupLine, hasSeenCurrentGift, isAnimating, isGiftCooldown, unclaimedGifts, completedGifts]);
+  }, [showGiftContent, currentPickupLine, hasSeenCurrentGift, isAnimating, isGiftCooldown, unclaimedGifts, dailyCompletedGifts, earnedGiftsToday]);
 
   // Add reset mechanism
   const resetGiftState = () => {
@@ -381,14 +382,19 @@ export default function HomeScreen() {
     setCurrentPickupLine(null);
     setIsAnimating(false);
     setIsGiftCooldown(false);
-    giftAnim.setValue(0); // Reset new animation value
-    circleAnim.setValue(0); // Reset new animation value
+    giftAnim.setValue(0);
+    circleAnim.setValue(0);
+    // Reset daily counters
+    setDailyCompletedGifts(0);
+    setEarnedGiftsToday(0);
+    setUnclaimedGifts(0);
+    setIsGiftUnlocked(false);
   };
 
   // Update the gift reveal animation (Restore Spin)
   const animateNewGiftReveal = async () => {
-    if (!user?.email || isAnimating) {
-      console.log('Animation already running or no user email.');
+    if (isAnimating) {
+      console.log('Animation already running.');
       return;
     }
 
@@ -398,90 +404,42 @@ export default function HomeScreen() {
     giftAnim.setValue(0); // Reset animation values
     circleAnim.setValue(0);
 
-    // Fetch the data first
-    let newPickupLine = null;
-    let success = false;
-    let fetchedStatsData = null;
-
-    try {
-      const headers: Record<string, string> = {
-        'x-user-email': user.email,
-        'X-Client-Type': 'mobile',
-      };
-      console.log('Fetching new pickup line...');
-      const response = await fetch(`${API_BASE_URL}/api/user-stats`, { headers });
-
-      if (response.ok) {
-        fetchedStatsData = await response.json();
-        console.log('Stats response:', fetchedStatsData);
-        if (fetchedStatsData.currentPickupLine) {
-          newPickupLine = fetchedStatsData.currentPickupLine;
-          success = true;
-          console.log('Got new pickup line:', newPickupLine);
-        } else {
-          console.log('No pickup line in response');
-        }
-      } else {
-        console.log('Failed to fetch stats:', response.status);
-      }
-    } catch (error) {
-      console.error('Error fetching pickup line:', error);
-      // Don't return yet, let animation finish visually
-    }
-
     // Run the animations in parallel
     Animated.parallel([
       Animated.timing(giftAnim, {
         toValue: 1,
         duration: 800,
-        easing: Easing.out(Easing.back(2)), // Example easing
-        useNativeDriver: true, // Scale and Rotate are native
+        easing: Easing.out(Easing.back(2)),
+        useNativeDriver: true,
       }),
       Animated.timing(circleAnim, {
-        toValue: 100, // Animate ring to full (100%)
+        toValue: 100,
         duration: 1000,
-        easing: Easing.out(Easing.quad), // Example easing
-        useNativeDriver: true, // strokeDashoffset is native
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
       }),
     ]).start(async ({ finished }) => {
-      console.log('Animation finished:', { finished, success, newPickupLine, fetchedStatsData });
+      console.log('Animation finished:', { finished });
 
-      let finalUnclaimedCount = unclaimedGifts; // Start with current state
-
-      // Update counts from fetched data if available
-      if (fetchedStatsData) {
-        const completedCount = fetchedStatsData.completedGifts || 0;
-        const swipesCount = fetchedStatsData.dailySwipes || 0;
-        const earnedBasedOnSwipes = Math.floor(swipesCount / SWIPES_PER_GIFT);
-        finalUnclaimedCount = Math.max(0, earnedBasedOnSwipes - completedCount);
-
-        console.log('Gift Reveal Callback Update:', {
-            swipes: swipesCount, completed: completedCount, earned: earnedBasedOnSwipes, unclaimedCalculated: finalUnclaimedCount
-        });
-
-        setCompletedGifts(completedCount);
-        setUnclaimedGifts(finalUnclaimedCount);
-        setIsGiftUnlocked(finalUnclaimedCount > 0);
-      }
-
-      // Handle display logic after animation
-      if (finished && success && newPickupLine) {
-        setCurrentPickupLine(newPickupLine);
+      // Handle display logic after animation - use already fetched line and counts
+      if (finished && currentPickupLine) { // Check if we have a line to show
         setShowGiftContent(true); // Let the pickup line component show
-        setHasSeenCurrentGift(true);
+        setHasSeenCurrentGift(true); // Mark as seen after animation
 
+        // Persist showing content (optional)
         if (user?.email) {
           try {
             await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
-              showGiftContent: true, // Persist that content should be shown
-              currentPickupLine: newPickupLine
+              showGiftContent: true,
+              currentPickupLine: currentPickupLine // Persist the line shown
             }));
           } catch (error) { console.error('Error saving gift state:', error); }
         }
 
-        if (finalUnclaimedCount === 0) {
-          console.log('Last gift opened, showing briefly then resetting.');
-          setTimeout(() => { resetGiftState(); fetchUserData(); }, 1500);
+        // Check if this was the last *daily* gift based on current state
+        if (unclaimedGifts === 0) {
+          console.log('Last daily gift opened, showing briefly then resetting.');
+          setTimeout(() => { resetGiftState(); fetchUserData(); }, 1500); // Reset visual state
         } else {
           // Apply cooldown for next gift
           setIsGiftCooldown(true);
@@ -494,11 +452,11 @@ export default function HomeScreen() {
              const currentProgress = calculateGiftProgress();
              if (currentProgress.hasGiftAvailable) { startGiftBounce(); }
           });
-          // The timeout for setting isGiftCooldown false is now handled by the animation callback
         }
       } else {
-        console.log('Failed to show pickup line or animation interrupted, resetting visual state');
-        resetGiftState(); // Reset visual elements
+        // If animation didn't finish or no line was fetched, reset visuals
+        console.log('Animation interrupted or no pickup line available, resetting visual state');
+        resetGiftState();
         fetchUserData(); // Refetch data to ensure consistency
       }
 
@@ -508,21 +466,20 @@ export default function HomeScreen() {
 
   // Calculate progress percentage (0-100)
   const calculateProgress = () => {
-    if (isFetchingStats || nextGiftThreshold === 0) return 0; // Handle loading/zero threshold
+    if (isFetchingStats) return 0; // Handle loading state
 
-    // Use the state value for hasGiftAvailable
+    // Use the daily unclaimed gifts state
     const hasGiftAvailable = unclaimedGifts > 0;
     if (hasGiftAvailable) {
-        return 100; // Show full if a gift is ready
+        return 100; // Show full if a daily gift is ready
     }
 
     if (currentSwipes === 0) return 0; // Start at 0 if no swipes
 
-    // Calculate progress towards the *correct* next threshold from state
+    // Calculate progress towards the *next* gift cycle today
     const progressTowardsNext = currentSwipes % SWIPES_PER_GIFT;
 
     // If exactly on threshold, but no gift available, show 0% for next cycle
-    // This logic seems sound assuming SWIPES_PER_GIFT determines cycles
     if (progressTowardsNext === 0 && currentSwipes > 0 && !hasGiftAvailable) {
         return 0;
     }
@@ -531,57 +488,110 @@ export default function HomeScreen() {
     return Math.min(progress, 100); // Cap at 100%
   };
 
-  // Calculate gift progress numbers (Corrected Logic)
-  const calculateGiftProgress = () => {
+  // Calculate gift progress numbers (Updated for Daily Logic)
+  const calculateGiftProgress = (): GiftProgress => {
     // Calculate current progress towards the *next* gift cycle
     const progressTowardsNext = currentSwipes % SWIPES_PER_GIFT;
+
     // Calculate remaining swipes for the current cycle
-    // If progress is 0 AND swipes > 0, it means a cycle was just completed, so remaining is full cycle.
     const remainingSwipes = (progressTowardsNext === 0 && currentSwipes > 0)
                               ? SWIPES_PER_GIFT
                               : SWIPES_PER_GIFT - progressTowardsNext;
 
-    // Determine if a gift is available based *only* on the unclaimedGifts state from backend
+    // Determine if a gift is available based on daily unclaimed gifts state
     const hasGiftAvailable = unclaimedGifts > 0;
 
-    console.log('Progress Debug (Corrected):', {
-      // Log state values directly where available
+    console.log('Progress Debug (Daily):', {
       currentSwipes,
-      unclaimedGifts, // Authoritative count from backend via state
+      earnedGiftsToday, // Use state value
+      dailyCompletedGifts, // Use state value
+      unclaimedGifts, // Use state value
       progressTowardsNext,
-      nextGiftThreshold, // Authoritative threshold from backend via state
       remainingSwipes,
       isGiftUnlocked, // State based on unclaimedGifts
-      completedGifts, // Authoritative count from backend via state
       hasGiftAvailable // Derived directly from unclaimedGifts state
-      // Removed the locally calculated totalAvailableGifts
     });
 
     return {
       currentProgress: progressTowardsNext,
-      nextThreshold: nextGiftThreshold, // Use the state value
       remainingSwipes,
-      completedGifts, // Use state value
+      earnedGiftsToday, // Return state value
+      dailyCompletedGifts, // Return state value
       hasGiftAvailable, // Use derived value from state
-      // totalAvailableGifts is no longer needed here, state logic relies on unclaimedGifts
     };
   };
 
-  // Handle gift press
-  const handleGiftPress = () => {
+  // Handle gift press (Updated to call API first)
+  const handleGiftPress = async () => {
     const giftProgress = calculateGiftProgress();
-    console.log('Gift Press Debug:', {
-      unclaimedGifts,
-      isGiftUnlocked,
+    console.log('Gift Press - Attempting to claim:', {
       hasGiftAvailable: giftProgress.hasGiftAvailable,
       isGiftCooldown,
       isAnimating
     });
 
-    if (giftProgress.hasGiftAvailable && !isGiftCooldown && !isAnimating) {
-      // Directly trigger the new reveal animation
-      animateNewGiftReveal();
+    // Basic check before hitting API
+    if (!giftProgress.hasGiftAvailable || isGiftCooldown || isAnimating || !user?.email) {
+       console.log('Gift press blocked by state.');
+       return;
     }
+
+    // Stop animations immediately
+    stopGiftBounce();
+    stopPulseAnimation();
+    setIsAnimating(true); // Visually indicate loading/attempting
+
+    try {
+        const headers: Record<string, string> = {
+            'x-user-email': user.email,
+            'X-Client-Type': 'mobile',
+            'Content-Type': 'application/json' // Important for POST
+        };
+
+        console.log('Calling /api/get-next-pickup-line...');
+        const response = await fetch(`${API_BASE_URL}/api/get-next-pickup-line`, {
+            method: 'POST',
+            headers,
+            // No body needed for this POST request based on backend setup
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // Expected success response: { success: true, pickupLine, dailyCompletedGifts, earnedGiftsToday }
+            console.log('Successfully claimed gift:', data);
+
+            // Update state with the received data BEFORE animating
+            setCurrentPickupLine(data.pickupLine);
+            setDailyCompletedGifts(data.dailyCompletedGifts);
+            setEarnedGiftsToday(data.earnedGiftsToday);
+            // Recalculate unclaimed based on updated daily counts
+            const newUnclaimed = Math.max(0, data.earnedGiftsToday - data.dailyCompletedGifts);
+            setUnclaimedGifts(newUnclaimed);
+            setIsGiftUnlocked(newUnclaimed > 0);
+
+            // Now trigger the visual animation
+            animateNewGiftReveal();
+
+        } else {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+            console.error('Failed to claim gift:', { status: response.status, error: errorData.error });
+            Alert.alert(
+                'No Gift Available',
+                errorData.error || 'You may have already claimed all gifts earned today, or there was an error.'
+            );
+             setIsAnimating(false); // Stop loading indicator
+             // Optionally refetch stats to ensure UI is consistent
+             fetchUserData();
+        }
+    } catch (error: any) {
+        console.error('Error calling get-next-pickup-line:', { error: error.message });
+        Alert.alert('Error', 'Could not check for gifts. Please try again.');
+        setIsAnimating(false); // Stop loading indicator
+        // Optionally refetch stats
+        fetchUserData();
+    }
+
+    // Note: setIsAnimating(false) is now handled within animateNewGiftReveal callback or error handlers
   };
 
   const handleManualTextPress = () => {
@@ -960,7 +970,7 @@ export default function HomeScreen() {
                        Resets at midnight
                   </Text>
                   {/* Tooltip - Use 'tip' style */}
-                  {currentSwipes < SWIPES_PER_GIFT && (
+                  {currentSwipes < SWIPES_PER_GIFT && earnedGiftsToday === 0 && (
                      <Text style={styles.tooltipText}>
                          Tap the gauge to charge your next gift!
                      </Text>
