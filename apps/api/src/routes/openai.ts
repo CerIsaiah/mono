@@ -231,7 +231,6 @@ router.post('/openai', async (req, res) => {
         { role: 'system', content: systemPromptContent },
         { role: 'user', content: userMessageContent },
       ],
-      response_format: { type: 'json_object' },
     });
 
     const message = response.choices[0].message;
