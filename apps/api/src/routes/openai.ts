@@ -310,7 +310,6 @@ router.post('/analyze-chat', async (req, res) => {
     const response = await openai.chat.completions.create({
       model: "o4-mini", //smartest model for task
       messages: messages,
-      max_completion_tokens: 500, // Use the correct parameter for this model
       temperature: 1, // Adjusted temp based on user edits
       response_format: { type: "json_object" }
     });
