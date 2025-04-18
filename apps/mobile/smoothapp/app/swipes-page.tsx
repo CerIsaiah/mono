@@ -500,9 +500,9 @@ export default function SwipesPage() {
 
         {/* Header Area */}
         <View style={styles.headerContainer}>
-           {/* Close Button */}
-           <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
-                <Ionicons name="close" size={28} color={COLORS.darkGray} />
+           {/* Home Button */}
+           <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/homepage')}>
+                <Ionicons name="home" size={28} color={COLORS.darkGray} />
            </TouchableOpacity>
 
             {/* Optional: Add Saved Button - Ensure route exists */}

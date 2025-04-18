@@ -348,18 +348,6 @@ export default function HomeScreen() {
       useNativeDriver: true,
     }).start();
   };
-  
-  // Update start/stop logic for bounce
-  useEffect(() => {
-      const { hasGiftAvailable } = calculateGiftProgress();
-      if (hasGiftAvailable && !isAnimating && !isGiftCooldown) {
-          startGiftBounce();
-      } else {
-          stopGiftBounce();
-      }
-      // Cleanup function to stop animation on unmount or when conditions change
-      return () => stopGiftBounce();
-  }, [isGiftUnlocked, isAnimating, isGiftCooldown]); // Rerun when gift availability or animation state changes
 
   // Add debug logging for gift state
   useEffect(() => {
@@ -391,8 +379,10 @@ export default function HomeScreen() {
     setIsGiftUnlocked(false);
   };
 
-  // Update the gift reveal animation (Restore Spin)
+  // --- NEW GIFT REVEAL ANIMATION (Simplified - Visuals Only) ---
   const animateNewGiftReveal = async () => {
+    // Removed API fetching logic - it happens before calling this
+    // Assumes currentPickupLine state is already set if successful
     if (isAnimating) {
       console.log('Animation already running.');
       return;
@@ -421,48 +411,61 @@ export default function HomeScreen() {
     ]).start(async ({ finished }) => {
       console.log('Animation finished:', { finished });
 
-      // Handle display logic after animation - use already fetched line and counts
-      if (finished && currentPickupLine) { // Check if we have a line to show
-        setShowGiftContent(true); // Let the pickup line component show
-        setHasSeenCurrentGift(true); // Mark as seen after animation
+      // If animation finished successfully, show the content and handle cooldown
+      if (finished) { 
+          setShowGiftContent(true); // Make the fetched line visible
+          setHasSeenCurrentGift(true); // Mark as seen after animation
 
-        // Persist showing content (optional)
-        if (user?.email) {
-          try {
-            await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
-              showGiftContent: true,
-              currentPickupLine: currentPickupLine // Persist the line shown
-            }));
-          } catch (error) { console.error('Error saving gift state:', error); }
-        }
+          // Persist showing content (optional)
+          if (user?.email && currentPickupLine) { // Ensure line exists before saving
+              try {
+                  await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
+                      showGiftContent: true,
+                      currentPickupLine: currentPickupLine // Persist the line shown
+                  }));
+              } catch (error) { console.error('Error saving gift state:', error); }
+          }
+          
+          // === NEW TIMING ===
+          console.log('[DEBUG] Main animation finished, setting isAnimating=false BEFORE cooldown check');
+          setIsAnimating(false); // Set main animation as done HERE
+          // === END NEW TIMING ===
 
-        // Check if this was the last *daily* gift based on current state
-        if (unclaimedGifts === 0) {
-          console.log('Last daily gift opened, showing briefly then resetting.');
-          setTimeout(() => { resetGiftState(); fetchUserData(); }, 1500); // Reset visual state
-        } else {
-          // Apply cooldown for next gift
-          setIsGiftCooldown(true);
-          Animated.sequence([
-            Animated.timing(cooldownOpacity, { toValue: 0.5, duration: 200, useNativeDriver: true }),
-            Animated.timing(cooldownOpacity, { toValue: 1, duration: 200, useNativeDriver: true, delay: 1600 })
-          ]).start(() => {
-             setIsGiftCooldown(false);
-             // Restart bounce if still unlocked after cooldown
-             const currentProgress = calculateGiftProgress();
-             if (currentProgress.hasGiftAvailable) { startGiftBounce(); }
-          });
-        }
+          // If there are more gifts (unclaimedGifts > 0), apply cooldown
+          if (unclaimedGifts > 0) {
+              // Apply cooldown for next gift
+              setIsGiftCooldown(true); // Set cooldown state
+              console.log('[DEBUG] Starting cooldown animation...');
+              Animated.sequence([
+                  Animated.timing(cooldownOpacity, { toValue: 0.5, duration: 200, useNativeDriver: true }),
+                  Animated.timing(cooldownOpacity, { toValue: 1, duration: 200, useNativeDriver: true, delay: 1600 })
+              ]).start(() => {
+                  console.log('[DEBUG] Cooldown sequence finished.');
+                  setIsGiftCooldown(false); // Cooldown finished
+                  // Restart bounce if still unlocked after cooldown
+                  const currentProgress = calculateGiftProgress();
+                  if (currentProgress.hasGiftAvailable) { startGiftBounce(); }
+                  // Set animating false AFTER cooldown finishes - REMOVED FROM HERE
+                  // console.log('[DEBUG] Cooldown finished, setting isAnimating=false'); 
+                  // setIsAnimating(false); 
+              });
+          } 
+          // REMOVED else block that set isAnimating=false - handled above now
+          // else {
+          //   // If it was the last gift, no cooldown needed, just stop animating.
+          //   console.log('[DEBUG] Last gift, no cooldown, setting isAnimating=false');
+          //   setIsAnimating(false); 
+          // }
       } else {
-        // If animation didn't finish or no line was fetched, reset visuals
-        console.log('Animation interrupted or no pickup line available, resetting visual state');
-        resetGiftState();
-        fetchUserData(); // Refetch data to ensure consistency
+          // If animation didn't finish, maybe just log and ensure loading stops
+          console.log('Animation interrupted.');
+          setIsAnimating(false); // Also ensure it stops if interrupted
       }
-
-      setIsAnimating(false); // Animation sequence complete
+      
+      // MOVED setIsAnimating(false) into the `if (finished)` block above
     });
   };
+  // --- END NEW GIFT REVEAL ANIMATION ---
 
   // Calculate progress percentage (0-100)
   const calculateProgress = () => {
@@ -526,13 +529,14 @@ export default function HomeScreen() {
     const giftProgress = calculateGiftProgress();
     console.log('Gift Press - Attempting to claim:', {
       hasGiftAvailable: giftProgress.hasGiftAvailable,
-      isGiftCooldown,
-      isAnimating
+      isAnimating, // Keep this check
+      isGiftCooldown, // Log this state
+      userEmail: user?.email // Log user email presence
     });
 
-    // Basic check before hitting API
-    if (!giftProgress.hasGiftAvailable || isGiftCooldown || isAnimating || !user?.email) {
-       console.log('Gift press blocked by state.');
+    // Basic check before hitting API - REMOVED isGiftCooldown check
+    if (!giftProgress.hasGiftAvailable || isAnimating || !user?.email) {
+       console.log('Gift press blocked by state (Not available, Animating, or No User).');
        return;
     }
 
@@ -568,6 +572,9 @@ export default function HomeScreen() {
             const newUnclaimed = Math.max(0, data.earnedGiftsToday - data.dailyCompletedGifts);
             setUnclaimedGifts(newUnclaimed);
             setIsGiftUnlocked(newUnclaimed > 0);
+            
+            // Log state right before triggering animation
+            console.log('State updated, triggering animation with line:', data.pickupLine);
 
             // Now trigger the visual animation
             animateNewGiftReveal();
@@ -818,25 +825,31 @@ export default function HomeScreen() {
           <View style={styles.mainContentArea}>
             {/* Main Content Container */}
             <View style={styles.mainContent}>
-              {/* Daily Pickup Line - Show when we have a line */}
-              {currentPickupLine && (
-                <View style={[
-                  styles.pickupLineContainer,
-                  giftState === 'gift-open' && styles.pickupLineContainerGiftOpen // Apply specific style when gift is open
-                ]}>
-                  <Text style={[
-                      styles.pickupLineHashtag,
-                      giftState === 'gift-open' && styles.pickupLineHashtagGiftOpen // Style for gift open state
-                  ]}>#dailypickuplines</Text>
-                  <View style={styles.giftIconContainer}>
-                    <Ionicons name="gift" size={24} color={giftState === 'gift-open' ? COLORS.white : COLORS.gold} />
-                  </View>
-                  <Text style={[
-                      styles.pickupLineText,
-                      giftState === 'gift-open' && styles.pickupLineTextGiftOpen // Style for gift open state
-                  ]}>"{currentPickupLine}"</Text>
+              {/* Daily Pickup Line - Render container always, style conditionally - UPDATED */}
+                <View style={styles.pickupLineContainer}> 
+                 {/* Conditionally render content inside */}
+                 {(currentPickupLine && showGiftContent) ? (
+                   // Display the actual pickup line
+                   <>
+                    <Text style={[
+                        styles.pickupLineHashtag,
+                        giftState === 'gift-open' && styles.pickupLineHashtagGiftOpen
+                    ]}>#dailypickuplines</Text>
+                    <View style={styles.giftIconContainer}>
+                      <Ionicons name="gift" size={24} color={giftState === 'gift-open' ? COLORS.white : COLORS.gold} />
+                    </View>
+                    <Text style={[
+                        styles.pickupLineText,
+                        giftState === 'gift-open' && styles.pickupLineTextGiftOpen
+                    ]}>"{currentPickupLine}"</Text>
+                  </>
+                 ) : (
+                   // Display placeholder text
+                   <Text style={styles.pickupLinePlaceholderText}>
+                     Upload chat screenshots and swipe to unlock daily pickup lines! 
+                   </Text>
+                 )}
                 </View>
-              )}
 
               {/* SVG Progress Gauge / Gift - Conditional Rendering */}
               {giftState === 'no-gift' ? (
@@ -871,7 +884,7 @@ export default function HomeScreen() {
                   </Svg>
 
                   {/* Content Overlay (Numerical Progress) */}
-                  <View style={styles.progressContentTouchable}> { /* Use View, not Touchable */}
+                  <View style={styles.progressContentTouchable}>
                     <View style={styles.progressContentInner}>
                       {isFetchingStats ? (
                           <ActivityIndicator size="large" color={COLORS.primaryPink} />
@@ -881,6 +894,10 @@ export default function HomeScreen() {
                             {calculateGiftProgress().currentProgress}
                             <Text style={styles.swipeGoalText}> / {SWIPES_PER_GIFT}</Text>
                           </Text>
+                          <Text style={styles.swipesHelperTextInner}>
+                            {calculateGiftProgress().remainingSwipes} daily swipes to next gift
+                          </Text>
+                        
                         </View>
                       )}
                     </View>
@@ -891,11 +908,10 @@ export default function HomeScreen() {
                 <View style={[ styles.progressContainer, { opacity: cooldownOpacity } ]}>
                     <TouchableOpacity
                       onPress={handleGiftPress}
-                      disabled={isFetchingStats || !calculateGiftProgress().hasGiftAvailable || isAnimating || isGiftCooldown}
+                      disabled={isFetchingStats || !calculateGiftProgress().hasGiftAvailable || isAnimating}
                       style={styles.progressContentTouchable} // Covers the area
                       accessibilityLabel={isAnimating ? "Opening gift..." : `Gift available (${unclaimedGifts} remaining), tap to open`}
                       accessibilityRole="button"
-                      accessibilityState={{ disabled: isFetchingStats || isAnimating || isGiftCooldown }}
                     >
                       <View style={styles.progressContentInner}>
                          {/* Animated Wrapper for Gift Icon (Scale, Spin, replaces Glow) */}
@@ -960,59 +976,42 @@ export default function HomeScreen() {
               )}
               {/* End Conditional Rendering */}
 
-              {/* Helper Text below the circle (State-driven) */}
-              {giftState === 'no-gift' && !isFetchingStats && (
-                <>
-                  <Text style={styles.swipesHelperText}>
-                    {calculateGiftProgress().remainingSwipes} daily swipes to next gift
-                  </Text>
-                  <Text style={styles.swipesResetTextSmall}>
-                       Resets at midnight
-                  </Text>
-                  {/* Tooltip - Use 'tip' style */}
-                  {currentSwipes < SWIPES_PER_GIFT && earnedGiftsToday === 0 && (
-                     <Text style={styles.tooltipText}>
-                         Tap the gauge to charge your next gift!
-                     </Text>
-                  )}
-                </>
-              )}
-              {/* Optional: Add text for gift-open state if needed */}
-
-
+              
               {/* Stats Container */}
               <View style={styles.statsRow}>
                 {isFetchingStats ? (
                   <ActivityIndicator size="small" color={COLORS.black} />
                 ) : (
                   <>
-                    {/* Convos Boosted Card with 3D Press */}
+                    {/* Convos Boosted Card */}
                     <Pressable {...card1PressHandlers}>
                        <Animated.View style={[styles.statCard, getCardAnimatedStyle(card1Anim)]}>
-                          <Ionicons
-                            name={boostedConvos > 0 ? "flame" : "flame-outline"}
-                            size={24}
-                            color={COLORS.primaryPink}
-                            style={styles.statIcon}
-                          />
-                          <Text style={styles.statLabel}>
-                            {boostedConvos > 0 ? `🔥 ${boostedConvos} Convos Boosted!` : "Boost a Convo!"}
-                          </Text>
+                          <View style={styles.statContent}>
+                            <Ionicons
+                              name="flame-outline"
+                              size={24}
+                              color={COLORS.primaryPink}
+                              style={styles.statIcon}
+                            />
+                            <Text style={styles.statNumber}>{boostedConvos}</Text>
+                            <Text style={styles.statLabel}>Convos{'\n'}Boosted</Text>
+                          </View>
                        </Animated.View>
                     </Pressable>
 
-                    {/* Days Active Card with 3D Press */}
+                    {/* Days Active Card */}
                     <Pressable {...card2PressHandlers}>
                        <Animated.View style={[styles.statCard, getCardAnimatedStyle(card2Anim)]}>
-                          <Ionicons
-                            name={daysActive > 0 ? "calendar" : "calendar-outline"}
-                            size={24}
-                            color={COLORS.primaryPink}
-                            style={styles.statIcon}
-                          />
-                          <Text style={styles.statLabel}>
-                            {daysActive > 0 ? `${daysActive} Days Active` : "Let's get started!"}
-                          </Text>
+                          <View style={styles.statContent}>
+                            <Ionicons
+                              name="bulb-outline"
+                              size={24}
+                              color={COLORS.primaryPink}
+                              style={styles.statIcon}
+                            />
+                            <Text style={styles.statNumber}>{daysActive}</Text>
+                            <Text style={styles.statLabel}>Days{'\n'}Active</Text>
+                          </View>
                         </Animated.View>
                     </Pressable>
                   </>
@@ -1240,9 +1239,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flexGrow: 1,
-    backgroundColor: 'transparent', // Make container transparent to see shapes
+    backgroundColor: 'transparent',
     alignItems: 'center',
-    paddingBottom: 100,
+    paddingBottom: 70, // Adjusted to account for bottom nav
   },
   header: {
     width: '100%',
@@ -1267,9 +1266,10 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     width: '90%', // Constrain content width
-    alignItems: 'center', // Center items within this block
-    paddingBottom: 32, // Add padding at the bottom of the main content block
-    backgroundColor: 'transparent', // Ensure content area doesn't block shapes
+    minHeight: 500, // Reduced from 650
+    alignItems: 'center',
+    paddingBottom: 80, // Increased to account for bottom nav
+    backgroundColor: 'transparent',
   },
   welcomeText: { // Updated for H1 style
     fontSize: 24,
@@ -1293,22 +1293,28 @@ const styles = StyleSheet.create({
     minWidth: MIN_TAP_TARGET_SIZE,
     minHeight: MIN_TAP_TARGET_SIZE,
   },
-  pickupLineContainer: { // Base style
+  pickupLineContainer: {
     width: '100%',
-    backgroundColor: COLORS.black, // Default background
+    backgroundColor: COLORS.black,
     borderRadius: 16,
-    padding: 20,
+    padding: 12, // Reduced from 16
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20, // Increased from 16 for better spacing
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4, },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 10,
+    justifyContent: 'center',
+    minHeight: 100, // Reduced from 130
   },
-  pickupLineContainerGiftOpen: { // Style for gift-open state
-      backgroundColor: COLORS.primaryPink, // Pink background when gift is open
-      shadowColor: COLORS.primaryPink, // Pink shadow
+  pickupLinePlaceholderText: {
+    color: COLORS.secondaryPink,
+    fontSize: 14, // Reduced from 16
+    textAlign: 'center',
+    fontWeight: '500',
+    paddingHorizontal: 16,
+    lineHeight: 20, // Added for better text spacing
   },
   pickupLineHashtag: { // Base style
     position: 'absolute',
@@ -1331,24 +1337,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  pickupLineText: { // Base style
-    color: COLORS.white, // Default color (on black)
-    fontSize: 18,
+  pickupLineText: {
+    color: COLORS.white,
+    fontSize: 16, // Reduced from 18
     textAlign: 'center',
     fontWeight: '600',
-    lineHeight: 24,
+    lineHeight: 22, // Reduced from 24
   },
   pickupLineTextGiftOpen: { // Style for gift-open state
       color: COLORS.white, // Ensure it's white on pink background too
   },
-  progressContainer: { // Now wrapped by Animated.View for pulse
+  progressContainer: {
     width: GAUGE_SIZE,
     height: GAUGE_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
-    marginBottom: 16,
-    position: 'relative', // Needed for absolute positioning of overlay
+    marginBottom: 16, // Increased from 12 for better spacing
+    marginTop: 4, // Added small top margin
+    position: 'relative',
   },
   progressContentTouchable: { // Absolutely positioned overlay for interactions
     ...StyleSheet.absoluteFillObject, // Take up same space as SVG
@@ -1368,49 +1375,58 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       justifyContent: 'center',
   },
-  statsRow: { // Flexbox is fine for this layout
+  statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    width: '100%', // Take full width available in mainContent
-    marginBottom: 24,
-    // Removed paddingHorizontal here, handled by card margin/padding or mainContent padding
+    width: '100%',
+    marginTop: 16, // Reduced from 24
+    paddingHorizontal: 20,
+    marginBottom: 8, // Added to reduce space below
   },
-  statCard: { // Added transition hints, removed static shadow if animated
+  statCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 8, // Reduced from 12
     borderWidth: 1,
     borderColor: COLORS.primaryPink,
-    padding: 16,
+    width: 90, // Reduced from 100
+    height: 80, // Reduced from 100
+    elevation: 1, // Reduced from 2
+  },
+  statContent: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '47%',
-    elevation: 4, // Keep base elevation for Android
-    minHeight: 110,
+    padding: 4, // Reduced from 8
   },
   statIcon: {
-    marginBottom: 8, // Space between icon and text
+    marginBottom: 2, // Reduced from 4
   },
-  statLabel: { // Updated typography
-    fontSize: 16, // Consistent body text size
+  statNumber: {
+    fontSize: 14, // Reduced from 16
+    fontWeight: '600',
+    color: COLORS.darkGray,
+    marginBottom: 1, // Reduced from 2
+  },
+  statLabel: {
+    fontSize: 11, // Reduced from 12
     fontWeight: '500',
-    color: COLORS.darkGray, // Use dark gray
+    color: COLORS.darkGray,
     textAlign: 'center',
-    lineHeight: 20, // Add line-height
   },
-  ctaContainer: { // Consistent spacing
-    width: '90%', // Match mainContent width
+  ctaContainer: {
+    width: '90%',
     alignItems: 'center',
-    marginTop: 16, // Space above buttons
+    marginTop: 12, // Reduced from 16
   },
-  button: { // Base button style
+  button: {
     width: '100%',
-    paddingVertical: 16, // var(--gap) ?
+    paddingVertical: 14, // Reduced from 16
     paddingHorizontal: 16,
-    borderRadius: 12, // var(--radius)
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16, // var(--gap)
-    minHeight: 50,
+    marginBottom: 12, // Reduced from 16
+    minHeight: 45, // Reduced from 50
   },
   uploadButton: { // Primary button style - Glassmorphism adaptation
     backgroundColor: COLORS.blackTransparent80, // Semi-transparent black
@@ -1471,22 +1487,20 @@ const styles = StyleSheet.create({
     color: COLORS.primaryPink, // Active color
     fontWeight: '600',
   },
-  swipeCountText: { // Inside SVG overlay
-    fontSize: 42, // Adjust size as needed to fit
+  swipeCountText: {
+    fontSize: 42,
     fontWeight: '600',
     color: COLORS.primaryPink,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-    includeFontPadding: false, // Try to align text better
-    textAlignVertical: 'center', // Try to align text better
-    // lineHeight: 48, // May not be needed if centered well
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
-  swipeGoalText: { // Inside SVG overlay
-    fontSize: 20, // Adjust size as needed
+  swipeGoalText: {
+    fontSize: 20,
     color: COLORS.textSecondary,
     fontWeight: '400',
     opacity: 0.8,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-    // lineHeight: 24,
   },
   swipesHelperText: { // Below SVG gauge
     fontSize: 16,
@@ -1496,6 +1510,13 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 24,
   },
+  swipesHelperTextInner: {
+    fontSize: 13, // Reduced from 14
+    color: COLORS.darkGray,
+    marginTop: 6, // Reduced from 8
+    textAlign: 'center',
+    fontWeight: '400',
+  },
   swipesResetTextSmall: { // Below SVG gauge
     fontSize: 16,
     color: COLORS.darkGray,
@@ -1503,6 +1524,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '400',
     lineHeight: 24,
+    opacity: 0.8,
+  },
+  swipesResetTextInner: {
+    fontSize: 14,
+    color: COLORS.darkGray,
+    marginTop: 4,
+    textAlign: 'center',
+    fontWeight: '400',
     opacity: 0.8,
   },
   tooltipText: { // Style for the tooltip (State A)
@@ -1642,6 +1671,7 @@ const styles = StyleSheet.create({
   },
   progressTextContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
   },
   giftIcon: { // Added style for gift icon (needed for potential pulse on icon itself)
       marginBottom: 8, // Add some space below icon before text/badge

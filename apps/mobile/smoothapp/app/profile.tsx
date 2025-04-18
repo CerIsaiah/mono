@@ -386,8 +386,8 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color={COLORS.black} />
+            <TouchableOpacity onPress={() => router.push('/homepage')} style={styles.backButton}>
+                <Ionicons name="home" size={24} color={COLORS.black} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Profile & Subscription</Text>
             <View style={{ width: 24 }} />{/* Spacer */}

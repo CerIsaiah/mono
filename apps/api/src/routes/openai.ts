@@ -44,7 +44,7 @@ INSTRUCTIONS###
    - Situational sarcasm
    - Context callback
    - Nuanced challenge
-   - Playful deflection  
+   - Playful deflection
    - Earnest curiosity
    - Light self-deprecation
    - Clever misdirection
@@ -78,7 +78,7 @@ INSTRUCTIONS###
      High energy → Medium → Low → Medium → High
 
 6. FORMAT REQUIREMENTS:
-   - EXACTLY 10 responses 
+   - EXACTLY 10 responses
    - No emojis
    - 5 different styles, 2 of each
    - Return as array of strings
@@ -88,13 +88,41 @@ INSTRUCTIONS###
 STRATEGY EXAMPLES###
 User: "Buy me a drink"
 Improved Responses: [
-  "Drinks on me if you beat me at pool", 
-  "The good stuff's where the good convos are", 
-  "Bold ask from someone who hates IPAs", 
+  "Drinks on me if you beat me at pool",
+  "The good stuff's where the good convos are",
+  "Bold ask from someone who hates IPAs",
 ]
 OUTPUT TEMPLATE###
 Return array with exactly 10 responses following all above rules JSON PARSEABLE
 """`,
+// UPDATED SYSTEM PROMPT FOR CHAT ANALYSIS
+'chat-analysis': `"""
+Analyze the provided chat screenshot from a dating app conversation. You are the participant whose messages appear on the RIGHT side. Rate EACH RIGHT-SIDE message based on the specified conversation context ('first_move', 'mid_game', 'end_game').
+
+INSTRUCTIONS###
+1.  **Identify Right-Side Messages:** Extract text from ALL messages sent by the user on the right.
+2.  **Contextual Rating:** For each right-side message, provide a VERY concise, qualitative rating (MAX 4 words). Evaluate effectiveness based on the conversation 'context':
+    *   **'first_move':** Focus on initiating interest, avoiding generics. (e.g., "Good hook!", "Too bland", "Engaging question", "Ask more")
+    *   **'mid_game':** Focus on flow, connection, humor, personality. (e.g., "Keeps it flowing", "Bit dry", "Nice callback!", "Show more you")
+    *   **'end_game':** Focus on suggesting meetup, transition, clarity. (e.g., "Clear next step", "A little vague", "Confident ask", "Smooth transition")
+3.  **Rating Style:** Be direct, encouraging, and extremely brief. Use fun, catchy phrases. Examples: "Solid gold!", "Needs more spice!", "Great vibe check", "Perfectly playful", "Kinda generic...", "Ooo bold move!", "Ask something back", "Nice follow-up".
+4.  **Output Format:** Return a JSON object containing a single key "analysis", which holds an array of objects. Each object must have two keys: 'message' (the exact right-side message text) and 'rating' (your max 4-word rating). Preserve message order.
+
+EXAMPLE OUTPUT (for 'mid_game' context)###
+{
+  "analysis": [
+    { "message": "Haha yeah that movie was wild", "rating": "Relatable, add question." },
+    { "message": "What else did you do this weekend?", "rating": "Good open question!" },
+    { "message": "Lol sounds fun!", "rating": "Bit passive, share more." }
+  ]
+}
+
+RESTRICTIONS###
+- Only analyze RIGHT-SIDE messages.
+- Ratings ABSOLUTELY MAX 4 words.
+- Output MUST be valid JSON: { "analysis": [ { "message": "...", "rating": "..." }, ... ] }
+- If no right-side messages, return { "analysis": [] }.
+"""`
 };
 
 // Helper function to validate base64 format
@@ -158,7 +186,7 @@ router.post('/openai', async (req, res) => {
     // Check usage status
     //const usageStatus = await checkUsageStatus(identifier, isEmail);
 
-    
+
     const { imageBase64, mode = 'first-move', context, lastText, spicyLevel = 50, firstMoveIdeas = '' } = req.body;
 
     logger.info('Debug - OpenAI Request:', {
@@ -214,66 +242,78 @@ router.post('/openai', async (req, res) => {
       });
     }
 
+    // Select the appropriate system prompt based on mode
+    const systemPromptContent = SYSTEM_PROMPTS[mode as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS['first-move'];
+
     // Make the call to OpenAI
     const response = await openai.chat.completions.create({
-      model: 'ft:gpt-4o-2024-08-06:personal:usepickup-6:B6vmJdwR:ckpt-step-56',
+      // Use fine-tuned model if available and appropriate, otherwise fallback
+      // model: 'ft:gpt-4o-2024-08-06:personal:usepickup-6:B6vmJdwR:ckpt-step-56',
+       model: 'gpt-4o', // Using a powerful model for potentially complex prompt following
       temperature: 0.7,
       messages: [
         {
           role: 'system',
-          content: SYSTEM_PROMPTS['first-move'],
+          content: systemPromptContent, // Use selected system prompt
         },
         ...userMessage, // Spread the user message(s) here
       ],
       response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'responses_format',
-          schema: {
-            type: 'object',
-            properties: {
-              responses: {
-                type: 'array',
-                items: {
-                  type: 'string',
-                },
-              },
-            },
-            required: ['responses'],
-            additionalProperties: false,
-          },
-          strict: true,
-        },
+        type: 'json_object', // Changed to json_object for the main endpoint
       },
     });
 
     const message = response.choices[0].message;
+    const finishReason = response.choices[0].finish_reason;
 
     // Check for refusal
-    if (message.refusal) {
+    if (message.refusal || finishReason === 'content_filter') {
+      logger.warn('OpenAI request refused or filtered', { refusal: message.refusal, finish_reason: finishReason, requestId });
       throw new Error(
-        `Model refused to generate response: ${message.refusal}`
+        `Model refused to generate response${message.refusal ? ': ' + message.refusal : ' due to content filter.'}`
       );
     }
 
     if (!message.content) {
-      throw new Error('No content received from OpenAI');
+       logger.warn('No content received from OpenAI', { finish_reason: finishReason, requestId });
+      throw new Error(`No content from AI. Finish reason: ${finishReason}`);
     }
 
     let parsedResponses;
     try {
-      parsedResponses = JSON.parse(message.content).responses;
+      // Attempt to parse assuming the structure { "responses": [...] }
+      const parsedJson = JSON.parse(message.content);
+      parsedResponses = parsedJson.responses;
+      if (!parsedResponses) {
+         throw new Error("Parsed JSON does not contain a 'responses' key.");
+      }
     } catch (parseError: any) {
       logger.error('Failed to parse OpenAI JSON response', { content: message.content, error: parseError.message, requestId });
-      throw new Error(`Failed to parse response from AI: ${parseError.message}`);
+      // Attempt to handle cases where the AI might return just the array
+      try {
+        parsedResponses = JSON.parse(`{"responses": ${message.content}}`).responses;
+        logger.info('Successfully parsed response after wrapping in {"responses": ...}', { requestId });
+      } catch (nestedError: any) {
+        logger.error('Failed second attempt to parse OpenAI response', { content: message.content, error: nestedError.message, requestId });
+        throw new Error(`Failed to parse response from AI: ${parseError.message}. Original content: ${message.content.substring(0, 100)}...`);
+      }
     }
 
-    if (!Array.isArray(parsedResponses) || parsedResponses.length !== 10) {
-      logger.warn('Invalid number/format of responses received', { count: parsedResponses?.length, requestId });
-      throw new Error(
-        `Invalid response format: Expected an array of 10 strings, received differently.`
-      );
+    // Validate the final parsed structure
+    if (!Array.isArray(parsedResponses) || parsedResponses.some(item => typeof item !== 'string')) {
+        logger.warn('Invalid format for parsed responses', { parsedResponses, requestId });
+        throw new Error(
+            `Invalid response format: Expected an array of strings in the 'responses' field.`
+        );
     }
+
+    // We expect 10 responses based on the prompt
+    if (parsedResponses.length !== 10) {
+      logger.warn('Unexpected number of responses received', { count: parsedResponses.length, expected: 10, requestId });
+      // Decide whether to error out or proceed with what was received
+      // For now, let's proceed but log a warning.
+    }
+
 
     return res.json({
       responses: parsedResponses,
@@ -283,17 +323,129 @@ router.post('/openai', async (req, res) => {
     logger.error('OpenAI API error (/openai route)', {
       error: error.message,
       stack: error.stack,
-      requestId,
+      requestId: requestId || 'unknown', // Ensure requestId is included if available
     });
     // Ensure a consistent error response structure
     const errorMessage = error.message || 'An internal server error occurred';
-    const statusCode = error.response?.status || 500; // Use status from OpenAI error if available
-    return res.status(statusCode).json({
+    const statusCode = error.response?.status || (error instanceof OpenAI.APIError ? error.status : 500); // Use status from OpenAI error if available
+    return res.status(statusCode ?? 500).json({
       error: errorMessage,
-      requestId,
+      requestId: requestId || 'unknown', // Ensure requestId is included
     });
   }
 });
+
+
+// NEW Endpoint for Chat Analysis
+router.post('/analyze-chat', async (req, res) => {
+  const requestId = crypto.randomUUID();
+  try {
+    const { imageBase64, context: chatContext = 'mid_game' } = req.body; // Default context if not provided
+    const userEmail = req.headers['x-user-email'] as string | undefined;
+
+    logger.info('Received /analyze-chat request', { userEmail, context: chatContext, requestId });
+
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Missing imageBase64 in request body', requestId });
+    }
+    if (!isValidBase64(imageBase64)) {
+      return res.status(400).json({ error: 'Invalid base64 format', requestId });
+    }
+
+    // Ensure the provided context is valid, fallback to a default if not
+    const validContexts = ['first_move', 'mid_game', 'end_game'];
+    const systemPromptContext = validContexts.includes(chatContext) ? chatContext : 'mid_game';
+
+    const systemPrompt = SYSTEM_PROMPTS['chat-analysis'];
+    if (!systemPrompt) {
+        throw new Error("Chat analysis system prompt is missing.");
+    }
+
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content: systemPrompt,
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Analyze the user's (right-side) messages in this chat screenshot using the '${systemPromptContext}' context.`
+          },
+          {
+            type: 'image_url',
+            image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
+          }
+        ]
+      }
+    ];
+
+    // Call OpenAI API
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Use mini for this analysis task
+      messages: messages,
+      max_tokens: 500, // Allow sufficient tokens for analysis of multiple messages
+      temperature: 0.4, // Slightly adjusted temperature for creative but concise ratings
+      response_format: { type: "json_object" } // Expect JSON output as defined in prompt
+    });
+
+    const message = response.choices[0].message;
+    const finishReason = response.choices[0].finish_reason;
+
+    if (message.refusal || finishReason === 'content_filter') {
+      logger.warn('OpenAI request refused or filtered for /analyze-chat', { refusal: message.refusal, finish_reason: finishReason, requestId });
+      throw new Error(`Model refused analysis${message.refusal ? ': ' + message.refusal : ' due to content filter.'}`);
+    }
+
+    if (!message.content) {
+      logger.warn('No content received from OpenAI for /analyze-chat', { finish_reason: finishReason, requestId });
+      throw new Error(`No analysis content from AI. Finish reason: ${finishReason}`);
+    }
+
+    // Parse the JSON response
+    let analysisResults;
+    try {
+      // The prompt asks for { "analysis": [...] }
+       const parsedJson = JSON.parse(message.content);
+       if (parsedJson.analysis && Array.isArray(parsedJson.analysis)) {
+          analysisResults = parsedJson.analysis;
+       } else {
+         throw new Error('Parsed JSON response does not contain the expected "analysis" array.');
+       }
+
+    } catch (parseError: any) {
+      logger.error('Failed to parse OpenAI JSON response for /analyze-chat', { content: message.content, error: parseError.message, requestId });
+      throw new Error(`Failed to parse analysis from AI: ${parseError.message}. Content: ${message.content.substring(0,100)}...`);
+    }
+
+    // Validate the structure of the results
+    if (!Array.isArray(analysisResults) || analysisResults.some((item: {message?: any, rating?: any}) => typeof item !== 'object' || !item.message || !item.rating || typeof item.rating !== 'string' || item.rating.split(' ').length > 4 )) {
+      logger.warn('Invalid analysis format or rating length received', { results: analysisResults, requestId });
+       // Even if format is valid, check rating length constraint
+       const invalidRating = analysisResults.find((item: {message?: any, rating?: any}) => typeof item.rating !== 'string' || item.rating.split(' ').length > 4);
+       if (invalidRating) {
+           throw new Error(`Invalid analysis format: Rating "${invalidRating.rating}" exceeds 4 words.`);
+       } else {
+           throw new Error('Invalid analysis format: Expected an array of {message, rating (string, max 4 words)} objects.');
+       }
+    }
+
+    logger.info(`Successfully generated chat analysis for ${analysisResults.length} messages`, { requestId });
+    return res.json({ analysis: analysisResults, requestId });
+
+  } catch (error: any) {
+    logger.error('OpenAI API error (/analyze-chat route)', {
+      error: error.message,
+      stack: error.stack,
+      requestId,
+    });
+    const errorMessage = error.message || 'An internal server error occurred during chat analysis';
+    const statusCode = error instanceof OpenAI.APIError ? error.status : 500;
+    return res.status(statusCode ?? 500).json({ error: errorMessage, requestId });
+  }
+});
+
 
 // Endpoint to rate a single image (kept for potential other uses or testing)
 router.post('/rate-image', async (req, res) => {
@@ -314,7 +466,10 @@ router.post('/rate-image', async (req, res) => {
       stack: error.stack,
       requestId,
     });
-    return res.status(500).json({ error: error.message, requestId });
+    // Use consistent error handling
+    const errorMessage = error.message || 'An internal server error occurred during image rating';
+    const statusCode = error instanceof OpenAI.APIError ? error.status : 500;
+    return res.status(statusCode ?? 500).json({ error: errorMessage, requestId });
   }
 });
 
@@ -375,7 +530,10 @@ router.post('/rate-multiple-images', async (req, res) => {
       stack: error.stack,
       requestId,
     });
-    return res.status(500).json({ error: 'An internal server error occurred while processing images.', requestId });
+     // Use consistent error handling
+    const errorMessage = error.message || 'An internal server error occurred while processing multiple images.';
+    const statusCode = error instanceof OpenAI.APIError ? error.status : 500;
+    return res.status(statusCode ?? 500).json({ error: errorMessage, requestId });
   }
 });
 

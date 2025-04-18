@@ -211,8 +211,8 @@ export default function ImageRatingScreen() {
                 <Stack.Screen options={{ title: 'Rate Top Images' }} />
                 
                 <TouchableOpacity onPress={() => router.replace('/homepage')} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={COLORS.primaryPink} />
-                    <Text style={styles.backButtonText}>Back to Home</Text>
+                    <Ionicons name="home" size={24} color={COLORS.primaryPink} />
+                    <Text style={styles.backButtonText}>Home</Text>
                 </TouchableOpacity>
 
                 <Text style={styles.title}>Select Up To 10 Images</Text>

@@ -29,11 +29,10 @@ export default function ChooseContextScreen() {
   const handleNextPress = () => {
     if (selectedContext && imageUri) {
       router.push({
-        pathname: '/swipes-page',
-        params: { 
-          mode: 'image',
-          selectedMode: selectedContext,
-          imageUri: imageUri 
+        pathname: '/chat-analysis',
+        params: {
+          selectedContext: selectedContext,
+          imageUri: imageUri
         }
       });
     } else {
