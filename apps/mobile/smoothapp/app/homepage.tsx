@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert, ActivityIndicator, Animated, Platform, Easing, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert, ActivityIndicator, Animated, Platform, Easing, Modal, TextInput, Dimensions, Pressable } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons'; // Assuming use of Expo icons
-import { useRouter, useFocusEffect } from 'expo-router'; // Import useRouter and useFocusEffect
+import { Svg, Circle } from 'react-native-svg'; // Import SVG components
+import { useRouter, useFocusEffect, usePathname } from 'expo-router'; // Import useRouter, useFocusEffect, usePathname
 import { useAuth } from '../src/context/AuthContext'; // Import useAuth
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -17,21 +18,43 @@ const COLORS = {
   black: '#000000',
   grey: '#F5F5F5', // Background if not pure white
   textSecondary: '#666666', // Added for textSecondary color
+  darkGray: '#555555', // Added for body text (Matches --dark-gray)
   lightGrey: '#E0E0E0', // Added for lightGrey color
   gold: '#FFD700',
+  lightPinkBg: '#fce4ec', // For background orb
+  primaryPinkTransparent: 'rgba(225, 29, 116, 0.1)', // For diagonal stripe (E11D74 with alpha)
+  blackTransparent80: 'rgba(0, 0, 0, 0.8)', // For glass button
+  blackTransparent95: 'rgba(0, 0, 0, 0.95)', // For glass button hover
+  whiteTransparent20: 'rgba(255, 255, 255, 0.2)', // For glass button border
 };
 
 // Add API base URL constant and Minimum Learning Percentage
 const API_BASE_URL = 'https://mono-production-8ef9.up.railway.app'; // Replace with your actual API URL or use env variables
 const MIN_LEARNING_PERCENTAGE = 10; // Or import from a shared constants file
 const SWIPES_PER_GIFT = 3; // Number of swipes needed to unlock a gift
+const MIN_TAP_TARGET_SIZE = 48; // Minimum tap target size for accessibility
+
+// SVG Gauge Constants
+const GAUGE_SIZE = 220;
+const STROKE_WIDTH = 15; // Was 15 in previous border implementation
+const RADIUS = (GAUGE_SIZE - STROKE_WIDTH) / 2;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+// Constants for new Gift Animation SVG Ring
+const GIFT_RING_RADIUS = 90; // Fixed radius for the animation ring
+const GIFT_RING_CIRC = 2 * Math.PI * GIFT_RING_RADIUS;
+const GIFT_RING_STROKE_WIDTH = 20; // Stroke width for animation ring
 
 // Placeholder for user data - replace with actual data fetching
 const userName = 'Isaiah';
 
+// Define Icon type for safety
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
 export default function HomeScreen() {
-  const router = useRouter(); // Initialize router
-  const { signOut, isLoading: isAuthLoading, user } = useAuth(); // Get signOut function, isLoading state, and user info
+  const router = useRouter();
+  const pathname = usePathname(); // Correctly get pathname
+  const { signOut, isLoading: isAuthLoading, user } = useAuth();
   const [matchPercentage, setMatchPercentage] = useState(MIN_LEARNING_PERCENTAGE);
   const [isFetchingPercentage, setIsFetchingPercentage] = useState(true);
   const [boostedConvos, setBoostedConvos] = useState<number>(0); // State for boosted convos
@@ -44,12 +67,7 @@ export default function HomeScreen() {
   const [hasSeenCurrentGift, setHasSeenCurrentGift] = useState(false);
   const [completedGifts, setCompletedGifts] = useState(0);
   const [unclaimedGifts, setUnclaimedGifts] = useState(0);
-  const [giftTaps, setGiftTaps] = useState(0);
-  const [giftScale] = useState(new Animated.Value(1));
-  const [circleScale] = useState(new Animated.Value(1));
-  const [giftRotation] = useState(new Animated.Value(0));
-  const [glowOpacity] = useState(new Animated.Value(0.2));
-  const [glowRadius] = useState(new Animated.Value(2));
+  const [giftBounce] = useState(new Animated.Value(0)); // Keep bounce for idle
   const [showGiftContent, setShowGiftContent] = useState(false);
   const [isResettingSwipes, setIsResettingSwipes] = useState(false);
   const [currentGiftIndex, setCurrentGiftIndex] = useState(0);
@@ -62,24 +80,58 @@ export default function HomeScreen() {
   const [spicyLevel, setSpicyLevel] = useState(50);
   const [isGiftCooldown, setIsGiftCooldown] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [cooldownOpacity] = useState(new Animated.Value(1));
+  const [progressAnimation] = useState(new Animated.Value(0)); // For gauge animation
+
+  // Use Animated.Value for strokeDashoffset for smoother transitions
+  const animatedStrokeDashoffset = useRef(new Animated.Value(CIRCUMFERENCE)).current;
+
+  // State for Card Hover Animation
+  const card1Anim = useRef(new Animated.Value(0)).current;
+  const card2Anim = useRef(new Animated.Value(0)).current;
+
+  // State for Gauge Pulse Animation
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // State for Nav Underline Animation
+  const navUnderlinePos = useRef(new Animated.Value(0)).current;
+  const navUnderlineScale = useRef(new Animated.Value(0)).current;
+
+  // --- ADDED NEW ANIMATION VALUES ---
+  // → scale + rotate gift
+  const giftAnim = useRef(new Animated.Value(0)).current;
+  // → drive strokeDashoffset for animation ring
+  const circleAnim = useRef(new Animated.Value(0)).current;
+  // --- END ADDED NEW ANIMATION VALUES ---
+
+  // --- ADDED NEW INTERPOLATIONS ---
+  // Interpolate gift transforms from giftAnim
+  const giftScaleAnim = giftAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.3, 1], // Pop effect
+  });
+  const giftRotateAnim = giftAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'], // Full spin
+  });
+
+  // Compute dashoffset for the animation ring from circleAnim
+  const ringStrokeDashoffset = circleAnim.interpolate({
+    inputRange: [0, 100],
+    // Animate from full circumference (hidden) to 0 (fully shown)
+    outputRange: [GIFT_RING_CIRC, 0],
+  });
+  // --- END ADDED NEW INTERPOLATIONS ---
 
   // Fetch user data - Define before use in useFocusEffect
   const fetchUserData = useCallback(async () => {
     if (!user?.email) {
       console.log("No user email found, skipping data fetch.");
-      setIsFetchingPercentage(false);
-      setIsFetchingStats(false);
-      setMatchPercentage(MIN_LEARNING_PERCENTAGE);
-      setBoostedConvos(0);
-      setDaysActive(0);
+      resetGiftState();
       setCurrentSwipes(0);
       setNextGiftThreshold(SWIPES_PER_GIFT);
-      setIsGiftUnlocked(false);
-      setCurrentPickupLine(null);
-      setHasSeenCurrentGift(false);
       setCompletedGifts(0);
       setUnclaimedGifts(0);
-      setShowGiftContent(false);
       return;
     }
 
@@ -99,24 +151,30 @@ export default function HomeScreen() {
 
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
-        const currentSwipesCount = statsData.currentSwipes || 0;
-        const seenPickupLines = statsData.seen_pickup_lines || [];
-        
-        // Calculate total available gifts based on swipes
-        const totalAvailableGifts = Math.floor(currentSwipesCount / SWIPES_PER_GIFT);
-        // Use seen pickup lines length as completed gifts count
-        const completedGiftsCount = seenPickupLines.length;
-        // Calculate unclaimed gifts
-        const unclaimedCount = Math.max(0, totalAvailableGifts - completedGiftsCount);
-        
-        console.log('Gift Debug:', {
+        console.log('Stats response:', statsData);
+
+        const currentSwipesCount = statsData.dailySwipes || 0; // Use dailySwipes from backend log
+        const completedGiftsCount = statsData.completedGifts || 0;
+        // Removed reliance on backend's totalAvailableGifts for this calculation
+
+        // Calculate earned gifts based *only* on current swipes
+        const earnedGiftsBasedOnSwipes = Math.floor(currentSwipesCount / SWIPES_PER_GIFT);
+
+        // Calculate unclaimed gifts based on earned vs completed
+        const unclaimedCount = Math.max(0, earnedGiftsBasedOnSwipes - completedGiftsCount);
+
+        console.log('Gift Debug (Corrected Calculation):', {
           currentSwipes: currentSwipesCount,
           completedGifts: completedGiftsCount,
-          totalAvailable: totalAvailableGifts,
-          unclaimed: unclaimedCount,
-          seenPickupLines: seenPickupLines.length
+          earnedBasedOnSwipes: earnedGiftsBasedOnSwipes,
+          unclaimedCalculated: unclaimedCount,
+          backendNextThreshold: statsData.nextGiftThreshold, // Log backend value
+          hasPickupLine: !!statsData.currentPickupLine
         });
 
+        // Always reset state first
+        resetGiftState();
+        
         setBoostedConvos(statsData.boostedConvos || 0);
         setDaysActive(statsData.daysActive || 0);
         setCurrentSwipes(currentSwipesCount);
@@ -124,52 +182,34 @@ export default function HomeScreen() {
         setUnclaimedGifts(unclaimedCount);
         
         // Set next threshold based on current swipes
-        const nextThreshold = ((Math.floor(currentSwipesCount / SWIPES_PER_GIFT) + 1) * SWIPES_PER_GIFT);
+        const nextThreshold = statsData.nextGiftThreshold || ((Math.floor(currentSwipesCount / SWIPES_PER_GIFT) + 1) * SWIPES_PER_GIFT);
         setNextGiftThreshold(nextThreshold);
         
         // Set gift availability based on unclaimed gifts
-        const shouldShowGift = unclaimedCount > 0;
+        const shouldShowGift = unclaimedCount > 0 && completedGiftsCount < currentSwipesCount;
         setIsGiftUnlocked(shouldShowGift);
-        
-        // Reset gift state if we have unclaimed gifts
-        if (shouldShowGift) {
-          setShowGiftContent(false);
-          setHasSeenCurrentGift(false);
-          setGiftTaps(0);
-          setCurrentPickupLine(null);
-        } else if (statsData.currentPickupLine && statsData.hasSeenCurrentGift) {
-          // Only show pickup line if we're not in gift mode and have a seen gift
+
+        // Only show pickup line if we have unclaimed gifts
+        if (shouldShowGift && statsData.currentPickupLine) {
           setCurrentPickupLine(statsData.currentPickupLine);
           setShowGiftContent(true);
-          setHasSeenCurrentGift(true);
+          setHasSeenCurrentGift(statsData.hasSeenCurrentGift || false);
         }
       } else {
-        // Reset all states on error
-        setBoostedConvos(0);
-        setDaysActive(0);
+        console.error('Failed to fetch stats:', statsResponse.status);
+        resetGiftState();
         setCurrentSwipes(0);
         setNextGiftThreshold(SWIPES_PER_GIFT);
-        setIsGiftUnlocked(false);
-        setCurrentPickupLine(null);
-        setHasSeenCurrentGift(false);
         setCompletedGifts(0);
         setUnclaimedGifts(0);
-        setShowGiftContent(false);
       }
     } catch (error: any) {
       console.error('Error fetching data:', error);
-      // Reset all states on error
-      setMatchPercentage(MIN_LEARNING_PERCENTAGE);
-      setBoostedConvos(0);
-      setDaysActive(0);
+      resetGiftState();
       setCurrentSwipes(0);
       setNextGiftThreshold(SWIPES_PER_GIFT);
-      setIsGiftUnlocked(false);
-      setCurrentPickupLine(null);
-      setHasSeenCurrentGift(false);
       setCompletedGifts(0);
       setUnclaimedGifts(0);
-      setShowGiftContent(false);
     } finally {
       setIsFetchingPercentage(false);
       setIsFetchingStats(false);
@@ -197,15 +237,63 @@ export default function HomeScreen() {
     loadGiftState();
   }, [user?.email]);
 
-  // Use useFocusEffect to refresh data when screen is focused
+  // Add focus effect to refresh state & manage animations
   useFocusEffect(
     useCallback(() => {
+      console.log('Homepage focused, refreshing state...');
+      // Reset states first to avoid flicker
+      resetGiftState();
+      setCurrentSwipes(0);
+      setNextGiftThreshold(SWIPES_PER_GIFT);
+      setCompletedGifts(0);
+      setUnclaimedGifts(0);
+      
+      // Then fetch fresh data
       if (user?.email) {
         fetchUserData();
       }
-      return () => {}; // cleanup function
-    }, [user?.email, fetchUserData])
+
+      // Start/Stop bounce based on fetched data (may need slight delay)
+      // Use setTimeout to check state after fetchUserData potentially updates it
+      setTimeout(() => {
+          const { hasGiftAvailable } = calculateGiftProgress();
+          if (hasGiftAvailable) {
+              startGiftBounce();
+              stopPulseAnimation(); // Stop pulse if gift is available
+          } else {
+              stopGiftBounce();
+              startPulseAnimation(); // Start pulse if no gift
+          }
+      }, 100); // Small delay to allow state update
+
+      // Update Nav Underline
+      updateNavUnderline(pathname);
+
+      // Cleanup animations on blur
+      return () => {
+          stopGiftBounce();
+          stopPulseAnimation();
+      };
+    }, [user?.email, fetchUserData, pathname]) // Add pathname dependency
   );
+
+  // Animate progress on load or when swipes change
+  useEffect(() => {
+    const progressPercent = calculateProgress(); // Get percentage 0-100
+    const targetOffset = CIRCUMFERENCE * (1 - progressPercent / 100);
+
+    // Animate the strokeDashoffset
+    Animated.timing(animatedStrokeDashoffset, {
+      toValue: targetOffset,
+      duration: 800, // Match transition duration from example
+      easing: Easing.out(Easing.ease), // Use ease-out easing
+      useNativeDriver: true, // strokeDashoffset can be animated natively
+    }).start();
+
+    // Also update the simple progress value if needed elsewhere
+    progressAnimation.setValue(progressPercent);
+
+  }, [currentSwipes, isFetchingStats]); // Re-run animation when swipes or loading state changes
 
   const handleUploadPress = () => {
     router.push('/upload'); // Navigate to the upload screen
@@ -221,59 +309,57 @@ export default function HomeScreen() {
     }
   };
 
-  // Animation for gift tap
-  const animateGiftTap = () => {
-    const baseScale = 1.2;
-    const tapScale = baseScale + (giftTaps * 0.1);
-    const circleScaleValue = 1 + (giftTaps * 0.05);
-    
-    Animated.parallel([
-      // Scale up gift
-      Animated.spring(giftScale, {
-        toValue: tapScale,
-        friction: 3,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      // Scale up circle
-      Animated.spring(circleScale, {
-        toValue: circleScaleValue,
-        friction: 3,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      // Rotation animation
-      Animated.sequence([
-        Animated.timing(giftRotation, {
-          toValue: (giftTaps % 2 === 0) ? 0.1 : -0.1,
-          duration: 200,
-          easing: Easing.elastic(1),
-          useNativeDriver: true,
-        }),
-        Animated.timing(giftRotation, {
-          toValue: 0,
-          duration: 200,
-          easing: Easing.elastic(1),
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
+  // Gift bounce animation
+  const bounceAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
-    Animated.parallel([
-      Animated.timing(glowOpacity, {
-        toValue: 0.3 + (giftTaps * 0.1),
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }),
-      Animated.timing(glowRadius, {
-        toValue: 4 + (giftTaps * 2),
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }),
-    ]).start();
+  const startGiftBounce = () => {
+    // Ensure previous animation is stopped
+    stopGiftBounce();
+    
+    giftBounce.setValue(0); // Reset before starting
+    bounceAnimationRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(giftBounce, {
+          toValue: -8, // Move up
+          duration: 1000,
+          easing: Easing.bezier(0.5, 0, 0.5, 1), // Ease in-out
+          useNativeDriver: true,
+        }),
+        Animated.timing(giftBounce, {
+          toValue: 0, // Move back down
+          duration: 1000,
+          easing: Easing.bezier(0.5, 0, 0.5, 1), // Ease in-out
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    bounceAnimationRef.current.start();
   };
+
+  const stopGiftBounce = () => {
+    if (bounceAnimationRef.current) {
+      bounceAnimationRef.current.stop();
+      bounceAnimationRef.current = null;
+    }
+    // Optionally reset position smoothly or instantly
+    Animated.timing(giftBounce, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+  
+  // Update start/stop logic for bounce
+  useEffect(() => {
+      const { hasGiftAvailable } = calculateGiftProgress();
+      if (hasGiftAvailable && !isAnimating && !isGiftCooldown) {
+          startGiftBounce();
+      } else {
+          stopGiftBounce();
+      }
+      // Cleanup function to stop animation on unmount or when conditions change
+      return () => stopGiftBounce();
+  }, [isGiftUnlocked, isAnimating, isGiftCooldown]); // Rerun when gift availability or animation state changes
 
   // Add debug logging for gift state
   useEffect(() => {
@@ -293,46 +379,43 @@ export default function HomeScreen() {
     setShowGiftContent(false);
     setHasSeenCurrentGift(false);
     setCurrentPickupLine(null);
-    setGiftTaps(0);
     setIsAnimating(false);
     setIsGiftCooldown(false);
-    giftRotation.setValue(0);
-    giftScale.setValue(1);
-    circleScale.setValue(1);
-    glowOpacity.setValue(0.2);
-    glowRadius.setValue(2);
+    giftAnim.setValue(0); // Reset new animation value
+    circleAnim.setValue(0); // Reset new animation value
   };
 
-  // Update the gift reveal animation
-  const animateGiftReveal = async () => {
-    // Reset state before starting new animation
-    resetGiftState();
+  // Update the gift reveal animation (Restore Spin)
+  const animateNewGiftReveal = async () => {
+    if (!user?.email || isAnimating) {
+      console.log('Animation already running or no user email.');
+      return;
+    }
+
+    stopGiftBounce();
+    stopPulseAnimation();
     setIsAnimating(true);
-    
-    // Fetch the data first but don't show it yet
+    giftAnim.setValue(0); // Reset animation values
+    circleAnim.setValue(0);
+
+    // Fetch the data first
     let newPickupLine = null;
     let success = false;
+    let fetchedStatsData = null;
 
     try {
-      if (!user?.email) {
-        console.log('No user email, aborting gift reveal');
-        setIsAnimating(false);
-        return;
-      }
-
       const headers: Record<string, string> = {
         'x-user-email': user.email,
         'X-Client-Type': 'mobile',
       };
-
       console.log('Fetching new pickup line...');
       const response = await fetch(`${API_BASE_URL}/api/user-stats`, { headers });
-      
+
       if (response.ok) {
-        const statsData = await response.json();
-        console.log('Stats response:', statsData);
-        if (statsData.currentPickupLine) {
-          newPickupLine = statsData.currentPickupLine;
+        fetchedStatsData = await response.json();
+        console.log('Stats response:', fetchedStatsData);
+        if (fetchedStatsData.currentPickupLine) {
+          newPickupLine = fetchedStatsData.currentPickupLine;
           success = true;
           console.log('Got new pickup line:', newPickupLine);
         } else {
@@ -343,172 +426,144 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('Error fetching pickup line:', error);
-      setIsAnimating(false);
-      return;
+      // Don't return yet, let animation finish visually
     }
 
-    // Start the animation sequence
-    console.log('Starting animation sequence...');
-    Animated.sequence([
-      // Spin and scale up
-      Animated.parallel([
-        Animated.timing(giftRotation, {
-          toValue: 4,
-          duration: 1000,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(giftScale, {
-          toValue: 2.5,
-          duration: 800,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        // Scale circle back down
-        Animated.timing(circleScale, {
-          toValue: 1,
-          duration: 800,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-      // Scale back down with bounce
-      Animated.spring(giftScale, {
+    // Run the animations in parallel
+    Animated.parallel([
+      Animated.timing(giftAnim, {
         toValue: 1,
-        friction: 3,
-        tension: 40,
-        useNativeDriver: true,
+        duration: 800,
+        easing: Easing.out(Easing.back(2)), // Example easing
+        useNativeDriver: true, // Scale and Rotate are native
+      }),
+      Animated.timing(circleAnim, {
+        toValue: 100, // Animate ring to full (100%)
+        duration: 1000,
+        easing: Easing.out(Easing.quad), // Example easing
+        useNativeDriver: true, // strokeDashoffset is native
       }),
     ]).start(async ({ finished }) => {
-      console.log('Animation finished:', { finished, success, newPickupLine });
-      // Animation has finished, now show the pickup line
+      console.log('Animation finished:', { finished, success, newPickupLine, fetchedStatsData });
+
+      let finalUnclaimedCount = unclaimedGifts; // Start with current state
+
+      // Update counts from fetched data if available
+      if (fetchedStatsData) {
+        const completedCount = fetchedStatsData.completedGifts || 0;
+        const swipesCount = fetchedStatsData.dailySwipes || 0;
+        const earnedBasedOnSwipes = Math.floor(swipesCount / SWIPES_PER_GIFT);
+        finalUnclaimedCount = Math.max(0, earnedBasedOnSwipes - completedCount);
+
+        console.log('Gift Reveal Callback Update:', {
+            swipes: swipesCount, completed: completedCount, earned: earnedBasedOnSwipes, unclaimedCalculated: finalUnclaimedCount
+        });
+
+        setCompletedGifts(completedCount);
+        setUnclaimedGifts(finalUnclaimedCount);
+        setIsGiftUnlocked(finalUnclaimedCount > 0);
+      }
+
+      // Handle display logic after animation
       if (finished && success && newPickupLine) {
         setCurrentPickupLine(newPickupLine);
-        setShowGiftContent(true);
+        setShowGiftContent(true); // Let the pickup line component show
         setHasSeenCurrentGift(true);
-        setUnclaimedGifts(prev => Math.max(0, prev - 1));
-        setCompletedGifts(prev => prev + 1);
-        
+
         if (user?.email) {
           try {
             await AsyncStorage.setItem(`gift_content_${user.email}`, JSON.stringify({
-              showGiftContent: true,
+              showGiftContent: true, // Persist that content should be shown
               currentPickupLine: newPickupLine
             }));
-          } catch (error) {
-            console.error('Error saving gift state:', error);
-          }
-        }
-        
-        // Fetch new data if this was the last gift
-        if (unclaimedGifts <= 1) {
-          fetchUserData();
+          } catch (error) { console.error('Error saving gift state:', error); }
         }
 
-        // Set cooldown period
-        setIsGiftCooldown(true);
-        setTimeout(() => {
-          setIsGiftCooldown(false);
-        }, 2000); // 2 second cooldown
+        if (finalUnclaimedCount === 0) {
+          console.log('Last gift opened, showing briefly then resetting.');
+          setTimeout(() => { resetGiftState(); fetchUserData(); }, 1500);
+        } else {
+          // Apply cooldown for next gift
+          setIsGiftCooldown(true);
+          Animated.sequence([
+            Animated.timing(cooldownOpacity, { toValue: 0.5, duration: 200, useNativeDriver: true }),
+            Animated.timing(cooldownOpacity, { toValue: 1, duration: 200, useNativeDriver: true, delay: 1600 })
+          ]).start(() => {
+             setIsGiftCooldown(false);
+             // Restart bounce if still unlocked after cooldown
+             const currentProgress = calculateGiftProgress();
+             if (currentProgress.hasGiftAvailable) { startGiftBounce(); }
+          });
+          // The timeout for setting isGiftCooldown false is now handled by the animation callback
+        }
       } else {
-        console.log('Failed to show pickup line, resetting state');
-        resetGiftState();
+        console.log('Failed to show pickup line or animation interrupted, resetting visual state');
+        resetGiftState(); // Reset visual elements
+        fetchUserData(); // Refetch data to ensure consistency
       }
-      setIsAnimating(false);
+
+      setIsAnimating(false); // Animation sequence complete
     });
-
-    // Glow animation
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(glowOpacity, {
-          toValue: 0.8,
-          duration: 800,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-        Animated.timing(glowRadius, {
-          toValue: 25,
-          duration: 800,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(glowOpacity, {
-          toValue: 0.2,
-          duration: 400,
-          useNativeDriver: false,
-        }),
-        Animated.timing(glowRadius, {
-          toValue: 2,
-          duration: 400,
-          useNativeDriver: false,
-        }),
-      ]),
-    ]).start();
   };
 
-  // Calculate the rotation interpolation
-  const spin = giftRotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  // Calculate the glow interpolation
-  const glowStyle = {
-    shadowColor: COLORS.gold,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: glowOpacity,
-    shadowRadius: glowRadius,
-  };
-
-  // Debug logs before rendering
-  console.log('[DEBUG] Rendering HomeScreen...');
-  console.log(`[DEBUG] isFetchingPercentage: ${isFetchingPercentage}`);
-  console.log(`[DEBUG] matchPercentage: ${matchPercentage}`);
-  console.log(`[DEBUG] Progress value: ${matchPercentage / 100}`);
-
-  // Calculate progress percentage
+  // Calculate progress percentage (0-100)
   const calculateProgress = () => {
-    if (currentSwipes === 0) return 0;
-    
+    if (isFetchingStats || nextGiftThreshold === 0) return 0; // Handle loading/zero threshold
+
+    // Use the state value for hasGiftAvailable
+    const hasGiftAvailable = unclaimedGifts > 0;
+    if (hasGiftAvailable) {
+        return 100; // Show full if a gift is ready
+    }
+
+    if (currentSwipes === 0) return 0; // Start at 0 if no swipes
+
+    // Calculate progress towards the *correct* next threshold from state
     const progressTowardsNext = currentSwipes % SWIPES_PER_GIFT;
-    // If we're at the start of a new gift (divisible by SWIPES_PER_GIFT), show 100%
-    if (progressTowardsNext === 0) return 100;
-    
-    // Otherwise show progress toward next gift
+
+    // If exactly on threshold, but no gift available, show 0% for next cycle
+    // This logic seems sound assuming SWIPES_PER_GIFT determines cycles
+    if (progressTowardsNext === 0 && currentSwipes > 0 && !hasGiftAvailable) {
+        return 0;
+    }
+
     const progress = (progressTowardsNext / SWIPES_PER_GIFT) * 100;
-    return progress;
+    return Math.min(progress, 100); // Cap at 100%
   };
 
-  // Calculate gift progress numbers
+  // Calculate gift progress numbers (Corrected Logic)
   const calculateGiftProgress = () => {
-    // Calculate total available gifts based on current swipes
-    const totalAvailableGifts = Math.floor(currentSwipes / SWIPES_PER_GIFT);
-    // Calculate current progress towards next gift
+    // Calculate current progress towards the *next* gift cycle
     const progressTowardsNext = currentSwipes % SWIPES_PER_GIFT;
-    // Calculate next threshold
-    const nextThreshold = ((Math.floor(currentSwipes / SWIPES_PER_GIFT) + 1) * SWIPES_PER_GIFT);
-    // Calculate remaining swipes to next gift
-    const remainingSwipes = SWIPES_PER_GIFT - progressTowardsNext;
-    
-    console.log('Progress Debug:', {
+    // Calculate remaining swipes for the current cycle
+    // If progress is 0 AND swipes > 0, it means a cycle was just completed, so remaining is full cycle.
+    const remainingSwipes = (progressTowardsNext === 0 && currentSwipes > 0)
+                              ? SWIPES_PER_GIFT
+                              : SWIPES_PER_GIFT - progressTowardsNext;
+
+    // Determine if a gift is available based *only* on the unclaimedGifts state from backend
+    const hasGiftAvailable = unclaimedGifts > 0;
+
+    console.log('Progress Debug (Corrected):', {
+      // Log state values directly where available
       currentSwipes,
-      totalAvailableGifts,
-      unclaimedGifts,
+      unclaimedGifts, // Authoritative count from backend via state
       progressTowardsNext,
-      nextThreshold,
+      nextGiftThreshold, // Authoritative threshold from backend via state
       remainingSwipes,
-      isGiftUnlocked
+      isGiftUnlocked, // State based on unclaimedGifts
+      completedGifts, // Authoritative count from backend via state
+      hasGiftAvailable // Derived directly from unclaimedGifts state
+      // Removed the locally calculated totalAvailableGifts
     });
-    
+
     return {
       currentProgress: progressTowardsNext,
-      nextThreshold,
+      nextThreshold: nextGiftThreshold, // Use the state value
       remainingSwipes,
-      completedGifts,
-      hasGiftAvailable: unclaimedGifts > 0,
-      totalAvailableGifts
+      completedGifts, // Use state value
+      hasGiftAvailable, // Use derived value from state
+      // totalAvailableGifts is no longer needed here, state logic relies on unclaimedGifts
     };
   };
 
@@ -517,20 +572,15 @@ export default function HomeScreen() {
     const giftProgress = calculateGiftProgress();
     console.log('Gift Press Debug:', {
       unclaimedGifts,
-      giftTaps,
       isGiftUnlocked,
       hasGiftAvailable: giftProgress.hasGiftAvailable,
       isGiftCooldown,
       isAnimating
     });
-    
+
     if (giftProgress.hasGiftAvailable && !isGiftCooldown && !isAnimating) {
-      if (giftTaps < 4) {
-        setGiftTaps(prev => prev + 1);
-        animateGiftTap();
-      } else {
-        animateGiftReveal();
-      }
+      // Directly trigger the new reveal animation
+      animateNewGiftReveal();
     }
   };
 
@@ -607,159 +657,422 @@ export default function HomeScreen() {
     }
   };
 
+  // Determine current state for styling
+  const giftState = calculateGiftProgress().hasGiftAvailable ? 'gift-open' : 'no-gift';
+  const gaugeForegroundColor = giftState === 'gift-open' ? COLORS.black : COLORS.primaryPink;
+
+  // --- New Animations --- 
+
+  // Card Press Animation
+  const createCardPressHandlers = (animValue: Animated.Value) => ({
+    onPressIn: () => {
+      Animated.timing(animValue, {
+        toValue: 1,
+        duration: 150, // Faster press in
+        useNativeDriver: true,
+      }).start();
+    },
+    onPressOut: () => {
+      Animated.timing(animValue, {
+        toValue: 0,
+        duration: 300, // Slower press out
+        useNativeDriver: true,
+      }).start();
+    },
+  });
+
+  const card1PressHandlers = createCardPressHandlers(card1Anim);
+  const card2PressHandlers = createCardPressHandlers(card2Anim);
+
+  const getCardAnimatedStyle = (animValue: Animated.Value) => ({
+    transform: [
+      { perspective: 600 },
+      {
+        rotateX: animValue.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', '3deg'], // Tilt slightly
+        }),
+      },
+      {
+        rotateY: animValue.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', '5deg'], // Tilt slightly more
+        }),
+      },
+    ],
+    shadowOpacity: animValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.1, 0.08], // Adjust shadow slightly (shadow props non-native)
+    }),
+    // Note: Animating elevation directly isn't smooth, shadowOpacity is better on iOS
+  });
+
+  // Gauge Pulse Animation
+  const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const startPulseAnimation = () => {
+      stopPulseAnimation(); // Ensure only one loop runs
+      pulseAnim.setValue(1); // Reset before starting
+      pulseAnimationRef.current = Animated.loop(
+          Animated.sequence([
+              Animated.timing(pulseAnim, {
+                  toValue: 1.05,
+                  duration: 1250, // 2.5s total cycle
+                  easing: Easing.inOut(Easing.ease),
+                  useNativeDriver: true,
+              }),
+              Animated.timing(pulseAnim, {
+                  toValue: 1,
+                  duration: 1250,
+                  easing: Easing.inOut(Easing.ease),
+                  useNativeDriver: true,
+              }),
+          ])
+      );
+      pulseAnimationRef.current.start();
+  };
+  const stopPulseAnimation = () => {
+      if (pulseAnimationRef.current) {
+          pulseAnimationRef.current.stop();
+          pulseAnimationRef.current = null;
+      }
+      // Reset scale smoothly
+      Animated.timing(pulseAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+  };
+
+  // Nav Underline Animation
+  const updateNavUnderline = (currentPath: string) => {
+    let targetIndex = -1;
+    if (currentPath === '/homepage') targetIndex = 0;
+    else if (currentPath === '/saved-responses') targetIndex = 1;
+    else if (currentPath === '/profile') targetIndex = 2;
+    else if (currentPath === '/image-rating') targetIndex = 3;
+    
+    const screenWidth = Dimensions.get('window').width;
+    const navItemWidth = screenWidth / 4; // Assuming 4 items
+    const targetPosition = targetIndex * navItemWidth;
+
+    if (targetIndex !== -1) {
+        Animated.parallel([
+            Animated.timing(navUnderlinePos, {
+                toValue: targetPosition,
+                duration: 300,
+                easing: Easing.out(Easing.ease),
+                useNativeDriver: true, // transform translateX is native
+            }),
+            Animated.timing(navUnderlineScale, {
+                toValue: 1,
+                duration: 300,
+                easing: Easing.out(Easing.ease),
+                useNativeDriver: true, // transform scaleX is native
+            }),
+        ]).start();
+    } else {
+        // Hide if path doesn't match
+        Animated.timing(navUnderlineScale, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+        }).start();
+    }
+  };
+
+  // --- End New Animations ---
+
+  // Debug logs before rendering
+  console.log('[DEBUG] Rendering HomeScreen...');
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      {/* Background Shapes */}
+      <View style={styles.backgroundShape1} />
+      <View style={styles.backgroundShape2} />
+      {/* Use LinearGradient if installed and desired */}
+      {/* <LinearGradient colors={[COLORS.lightPinkBg, 'transparent']} style={styles.backgroundShape1} /> */}
+      {/* <LinearGradient colors={['transparent', COLORS.primaryPinkTransparent, COLORS.primaryPinkTransparent, 'transparent']} style={styles.backgroundShape2} /> */}
+
+      <ScrollView contentContainerStyle={styles.container} scrollIndicatorInsets={{ right: 1 }}>
         {/* Welcome Header */}
         <View style={styles.header}>
-          <Text style={styles.welcomeText}>Welcome <Text style={styles.userName}>{userName}!</Text></Text>
+          <Text style={styles.welcomeText}>
+            <Text style={styles.welcomePrefix}>Welcome </Text>
+            <Text style={styles.userName}>{userName}!</Text>
+          </Text>
           <TouchableOpacity onPress={handleLogout} disabled={isAuthLoading} style={styles.logoutButton}>
             <Ionicons name="log-out-outline" size={28} color={COLORS.primaryPink} />
           </TouchableOpacity>
         </View>
 
-        {/* Main Content Container */}
-        <View style={styles.mainContent}>
-          {/* Daily Pickup Line - Show when gift is revealed */}
-          {showGiftContent && currentPickupLine && (
-            <View style={styles.pickupLineContainer}>
-              <Text style={styles.pickupLineHashtag}>#dailypickuplines</Text>
-              <View style={styles.giftIconContainer}>
-                <Ionicons name="gift" size={24} color={COLORS.gold} />
-              </View>
-              <Text style={styles.pickupLineText}>"{currentPickupLine}"</Text>
-            </View>
-          )}
-
-          {/* Progress Circle / Gift */}
-          <Animated.View 
-            style={[
-              styles.progressContainer, 
-              showGiftContent && styles.progressContainerWithGift,
-              { transform: [{ scale: circleScale }] }
-            ]}
-          >
-            {/* Background Track */}
-            <View style={styles.progressBackgroundCircle} />
-
-            {/* Progress Fill */}
-            <View style={[
-              styles.progressHalfCircleWrapper,
-              { transform: [{ rotate: `${(calculateProgress() / 100) * 360}deg` }] }
-            ]}>
-              <View style={styles.progressHalfCircle} />
-            </View>
-
-            {/* Content */}
-            <TouchableOpacity 
-              onPress={handleGiftPress}
-              disabled={isFetchingStats || !calculateGiftProgress().hasGiftAvailable || isAnimating || isGiftCooldown}
-              style={StyleSheet.absoluteFill}
-            >
-              <Animated.View style={[styles.progressContent, {
-                transform: [
-                  { scale: giftScale },
-                  { rotate: spin }
-                ]
-              }]}>
-                <Animated.View style={[styles.giftContainer, glowStyle]}>
-                  {isFetchingStats ? (
-                    <ActivityIndicator size="large" color={COLORS.primaryPink} />
-                  ) : calculateGiftProgress().hasGiftAvailable ? (
-                    <>
-                      <Ionicons name="gift" size={52} color={COLORS.gold} />
-                      <Text style={styles.tapToOpenText}>
-                        {giftTaps === 0 ? "Tap to charge!" : "Keep tapping!"}
-                      </Text>
-                    </>
-                  ) : (
-                    <View style={styles.progressTextContainer}>
-                      <Text style={styles.swipeCountText}>
-                        {calculateGiftProgress().currentProgress}
-                        <Text style={styles.swipeGoalText}> / {SWIPES_PER_GIFT}</Text>
-                      </Text>
-                      <Text style={styles.swipesLeftText}>
-                        {calculateGiftProgress().remainingSwipes} daily swipes to gift
-                      </Text>
-                      <Text style={styles.nextGiftText}>
-                        Next gift at {calculateGiftProgress().nextThreshold}
-                      </Text>
-                      <Text style={styles.swipesResetText}>
-                        Resets at midnight
-                      </Text>
-                    </View>
-                  )}
-                </Animated.View>
-              </Animated.View>
-            </TouchableOpacity>
-          </Animated.View>
-
-          {/* Stats Container */}
-          <View style={styles.smoothRizzContainer}>
-            {isFetchingStats ? (
-              <ActivityIndicator size="small" color={COLORS.black} />
-            ) : (
-              <>
-                <View style={styles.scoreBubble}>
-                  <Text style={styles.scoreText}>🔥</Text>
+        {/* Main Content Wrapper */}
+        <View style={styles.centeredContentWrapper}>
+          {/* Main Content Area */}
+          <View style={styles.mainContentArea}>
+            {/* Main Content Container */}
+            <View style={styles.mainContent}>
+              {/* Daily Pickup Line - Show when we have a line */}
+              {currentPickupLine && (
+                <View style={[
+                  styles.pickupLineContainer,
+                  giftState === 'gift-open' && styles.pickupLineContainerGiftOpen // Apply specific style when gift is open
+                ]}>
+                  <Text style={[
+                      styles.pickupLineHashtag,
+                      giftState === 'gift-open' && styles.pickupLineHashtagGiftOpen // Style for gift open state
+                  ]}>#dailypickuplines</Text>
+                  <View style={styles.giftIconContainer}>
+                    <Ionicons name="gift" size={24} color={giftState === 'gift-open' ? COLORS.white : COLORS.gold} />
+                  </View>
+                  <Text style={[
+                      styles.pickupLineText,
+                      giftState === 'gift-open' && styles.pickupLineTextGiftOpen // Style for gift open state
+                  ]}>"{currentPickupLine}"</Text>
                 </View>
-                <Text style={styles.smoothRizzText}>{`${boostedConvos} Convos Boosted`}</Text>
-                <View style={[styles.scoreBubble, { marginLeft: 15 }]}>
-                  <Text style={styles.scoreText}>💡</Text>
-                </View>
-                <Text style={styles.smoothRizzText}>{`${daysActive} Days Active`}</Text>
-              </>
-            )}
-          </View>
-
-          {/* Action Buttons */}
-          <TouchableOpacity 
-            style={[styles.button, styles.uploadButton]}
-            onPress={handleUploadPress}
-          >
-            <Text style={styles.uploadButtonText}>Upload your Screenshot</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.button, styles.manualButton]}
-            onPress={handleManualTextPress}
-          >
-            <Text style={styles.manualButtonText}>Type Text Manually</Text>
-          </TouchableOpacity>
-          
-          {/* Reset Swipes Button - Show only when user has done some swipes */}
-          {currentSwipes > 0 && (
-            <TouchableOpacity 
-              style={[styles.button, styles.resetButton, isResettingSwipes && styles.disabledButton]}
-              onPress={handleResetSwipes}
-              disabled={isResettingSwipes}
-            >
-              {isResettingSwipes ? (
-                <ActivityIndicator size="small" color={COLORS.white} />
-              ) : (
-                <Text style={styles.resetButtonText}>Reset Daily Swipes</Text>
               )}
-            </TouchableOpacity>
-          )}
+
+              {/* SVG Progress Gauge / Gift - Conditional Rendering */}
+              {giftState === 'no-gift' ? (
+                // STATE: No Gift - Show SVG Gauge and Progress Text
+                <Animated.View style={[
+                    styles.progressContainer,
+                    { transform: [{ scale: pulseAnim }] } // Apply pulse scale only when no gift
+                ]}>
+                  <Svg width={GAUGE_SIZE} height={GAUGE_SIZE} viewBox={`0 0 ${GAUGE_SIZE} ${GAUGE_SIZE}`}>
+                    {/* Background Circle */}
+                    <Circle
+                      cx={GAUGE_SIZE / 2}
+                      cy={GAUGE_SIZE / 2}
+                      r={RADIUS}
+                      stroke={COLORS.grey}
+                      strokeWidth={STROKE_WIDTH}
+                      fill="none"
+                    />
+                    {/* Foreground Circle (Animated) - Only for no-gift state */}
+                    <AnimatedCircle
+                      cx={GAUGE_SIZE / 2}
+                      cy={GAUGE_SIZE / 2}
+                      r={RADIUS}
+                      stroke={gaugeForegroundColor} // Should be COLORS.primaryPink here
+                      strokeWidth={STROKE_WIDTH}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeDasharray={CIRCUMFERENCE}
+                      strokeDashoffset={animatedStrokeDashoffset}
+                      transform={`rotate(-90 ${GAUGE_SIZE / 2} ${GAUGE_SIZE / 2})`}
+                    />
+                  </Svg>
+
+                  {/* Content Overlay (Numerical Progress) */}
+                  <View style={styles.progressContentTouchable}> { /* Use View, not Touchable */}
+                    <View style={styles.progressContentInner}>
+                      {isFetchingStats ? (
+                          <ActivityIndicator size="large" color={COLORS.primaryPink} />
+                      ) : (
+                        <View style={styles.progressTextContainer}>
+                          <Text style={styles.swipeCountText}>
+                            {calculateGiftProgress().currentProgress}
+                            <Text style={styles.swipeGoalText}> / {SWIPES_PER_GIFT}</Text>
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </Animated.View>
+              ) : (
+                // STATE: Gift Open - Show Gift Icon and Tap Interaction
+                <View style={[ styles.progressContainer, { opacity: cooldownOpacity } ]}>
+                    <TouchableOpacity
+                      onPress={handleGiftPress}
+                      disabled={isFetchingStats || !calculateGiftProgress().hasGiftAvailable || isAnimating || isGiftCooldown}
+                      style={styles.progressContentTouchable} // Covers the area
+                      accessibilityLabel={isAnimating ? "Opening gift..." : `Gift available (${unclaimedGifts} remaining), tap to open`}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: isFetchingStats || isAnimating || isGiftCooldown }}
+                    >
+                      <View style={styles.progressContentInner}>
+                         {/* Animated Wrapper for Gift Icon (Scale, Spin, replaces Glow) */}
+                         <Animated.View style={[
+                             styles.innerGiftWrapper, // Keep this for centering etc.
+                             {
+                                 transform: [
+                                     // Apply new animations: scale and rotate
+                                     { scale: giftScaleAnim },
+                                     { rotate: giftRotateAnim }
+                                     // Removed old scale and spin
+                                 ]
+                             },
+                          ]}>
+                            {/* Bouncing Gift Icon (Still uses giftBounce for idle) */}
+                           <Animated.View style={{ alignItems: 'center', transform: [{ translateY: giftBounce }] }}>
+                             <Ionicons name="gift" size={52} color={COLORS.gold} style={styles.giftIcon} />
+                             {/* Display unclaimed gifts count as a badge */}
+                             {!isAnimating && unclaimedGifts > 0 && (
+                               <View style={styles.giftCountBadge}>
+                                 <Text style={styles.giftCountText}>{unclaimedGifts}</Text>
+                               </View>
+                             )}
+                             {/* Text changes based on state */}
+                             <Text style={styles.tapToOpenText}>
+                               {isAnimating ? "Opening..." : isGiftCooldown ? "Nice!" : "Tap to Open!"}
+                             </Text>
+                           </Animated.View>
+                         </Animated.View>
+
+                         {/* Conditionally Render SVG Ring Animation Overlay */}
+                         {isAnimating && (
+                           <View style={styles.giftRingOverlay}>
+                              <Svg width={GIFT_RING_RADIUS * 2 + GIFT_RING_STROKE_WIDTH} height={GIFT_RING_RADIUS * 2 + GIFT_RING_STROKE_WIDTH} style={{ transform: [{ rotate: '-90deg' }] }}>
+                                {/* grey track */}
+                                <Circle
+                                  cx={GIFT_RING_RADIUS + GIFT_RING_STROKE_WIDTH / 2}
+                                  cy={GIFT_RING_RADIUS + GIFT_RING_STROKE_WIDTH / 2}
+                                  r={GIFT_RING_RADIUS}
+                                  stroke={COLORS.grey} // Background track color
+                                  strokeWidth={GIFT_RING_STROKE_WIDTH}
+                                  fill="none"
+                                />
+                                {/* animated fill */}
+                                <AnimatedCircle
+                                  cx={GIFT_RING_RADIUS + GIFT_RING_STROKE_WIDTH / 2}
+                                  cy={GIFT_RING_RADIUS + GIFT_RING_STROKE_WIDTH / 2}
+                                  r={GIFT_RING_RADIUS}
+                                  stroke={COLORS.primaryPink} // Fill color
+                                  strokeWidth={GIFT_RING_STROKE_WIDTH}
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeDasharray={GIFT_RING_CIRC}
+                                  strokeDashoffset={ringStrokeDashoffset} // Driven by circleAnim
+                                />
+                              </Svg>
+                           </View>
+                         )}
+                       </View>
+                    </TouchableOpacity>
+                </View>
+              )}
+              {/* End Conditional Rendering */}
+
+              {/* Helper Text below the circle (State-driven) */}
+              {giftState === 'no-gift' && !isFetchingStats && (
+                <>
+                  <Text style={styles.swipesHelperText}>
+                    {calculateGiftProgress().remainingSwipes} daily swipes to next gift
+                  </Text>
+                  <Text style={styles.swipesResetTextSmall}>
+                       Resets at midnight
+                  </Text>
+                  {/* Tooltip - Use 'tip' style */}
+                  {currentSwipes < SWIPES_PER_GIFT && (
+                     <Text style={styles.tooltipText}>
+                         Tap the gauge to charge your next gift!
+                     </Text>
+                  )}
+                </>
+              )}
+              {/* Optional: Add text for gift-open state if needed */}
+
+
+              {/* Stats Container */}
+              <View style={styles.statsRow}>
+                {isFetchingStats ? (
+                  <ActivityIndicator size="small" color={COLORS.black} />
+                ) : (
+                  <>
+                    {/* Convos Boosted Card with 3D Press */}
+                    <Pressable {...card1PressHandlers}>
+                       <Animated.View style={[styles.statCard, getCardAnimatedStyle(card1Anim)]}>
+                          <Ionicons
+                            name={boostedConvos > 0 ? "flame" : "flame-outline"}
+                            size={24}
+                            color={COLORS.primaryPink}
+                            style={styles.statIcon}
+                          />
+                          <Text style={styles.statLabel}>
+                            {boostedConvos > 0 ? `🔥 ${boostedConvos} Convos Boosted!` : "Boost a Convo!"}
+                          </Text>
+                       </Animated.View>
+                    </Pressable>
+
+                    {/* Days Active Card with 3D Press */}
+                    <Pressable {...card2PressHandlers}>
+                       <Animated.View style={[styles.statCard, getCardAnimatedStyle(card2Anim)]}>
+                          <Ionicons
+                            name={daysActive > 0 ? "calendar" : "calendar-outline"}
+                            size={24}
+                            color={COLORS.primaryPink}
+                            style={styles.statIcon}
+                          />
+                          <Text style={styles.statLabel}>
+                            {daysActive > 0 ? `${daysActive} Days Active` : "Let's get started!"}
+                          </Text>
+                        </Animated.View>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+
+              {/* Action Buttons Container */}
+              <View style={styles.ctaContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.uploadButton]} // Updated style for glass effect
+                  onPress={handleUploadPress}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.uploadButtonText}>Upload your Screenshot</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, styles.manualButton]}
+                  onPress={handleManualTextPress}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.manualButtonText}>Type Text Manually</Text>
+                </TouchableOpacity>
+              </View>
+
+            </View>
+          </View>
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
+      {/* Bottom Navigation with Underline */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/homepage')}> 
-          <Ionicons name="home" size={26} color={COLORS.primaryPink} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/saved-responses')}> 
-          <Ionicons name="bookmark-outline" size={26} color={COLORS.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/profile')}>
-          <Ionicons name="person-outline" size={26} color={COLORS.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/image-rating')}> 
-          <Ionicons name="star-outline" size={26} color={COLORS.textSecondary} />
-        </TouchableOpacity>
+          {/* Nav Items */}  
+          {[ 
+              { path: '/homepage', label: 'Home', icon: 'home', iconOutline: 'home-outline' },
+              { path: '/saved-responses', label: 'Bookmarks', icon: 'bookmark', iconOutline: 'bookmark-outline' },
+              { path: '/profile', label: 'Profile', icon: 'person', iconOutline: 'person-outline' },
+              { path: '/image-rating', label: 'Favorites', icon: 'star', iconOutline: 'star-outline' },
+          ].map((item, index) => {
+              const isActive = pathname === item.path;
+              const iconName: IconName = isActive ? item.icon as IconName : item.iconOutline as IconName; // Determine icon name and assert type
+              return (
+                  <TouchableOpacity 
+                      key={item.path}
+                      style={styles.navItem}
+                      onPress={() => isActive ? {} : router.replace(item.path as any)} // Use type assertion for path
+                  >
+                      <Ionicons 
+                          name={iconName} // Use typed icon name
+                          size={26} 
+                          color={isActive ? COLORS.primaryPink : COLORS.textSecondary} 
+                      />
+                      <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{item.label}</Text>
+                  </TouchableOpacity>
+              );
+          })}
+          {/* Animated Underline */}  
+          <Animated.View 
+              style={[
+                  styles.navUnderline,
+                  {
+                      transform: [
+                          { translateX: navUnderlinePos },
+                          { scaleX: navUnderlineScale },
+                      ],
+                  },
+              ]}
+          />
       </View>
 
-      {/* Add Modal component before the bottom navigation */}
+      {/* Modal */}
       <Modal
         visible={isTextInputModalVisible}
         animationType="slide"
@@ -881,392 +1194,376 @@ export default function HomeScreen() {
   );
 }
 
+// Create Animated version of Circle for native animation
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.white, // --bg equivalent
+    position: 'relative', // Needed for absolute positioned shapes
+    overflow: 'hidden', // Contain shapes
+  },
+  backgroundShape1: { // Pink orb
+      position: 'absolute',
+      top: '-20%', // Adjust positioning as needed
+      left: '-10%',
+      width: 300,
+      height: 300,
+      borderRadius: 150,
+      backgroundColor: COLORS.lightPinkBg, // Solid color placeholder
+      // Use LinearGradient component for actual gradient
+      zIndex: -1,
+      opacity: 0.5, // Make it softer
+  },
+  backgroundShape2: { // Diagonal stripe
+      position: 'absolute',
+      bottom: -50,
+      right: -50,
+      width: 400,
+      height: 400,
+      backgroundColor: COLORS.primaryPinkTransparent, // Solid color placeholder
+      // Use LinearGradient component for actual gradient
+      transform: [{ rotate: '20deg' }],
+      zIndex: -1,
+      opacity: 0.7,
   },
   container: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 120,
+    backgroundColor: 'transparent', // Make container transparent to see shapes
+    alignItems: 'center',
+    paddingBottom: 100,
   },
   header: {
     width: '100%',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between', // Keep space between for alignment
+    alignItems: 'center', // Vertically center items
+    paddingHorizontal: 20, // Consistent horizontal padding
+    paddingTop: Platform.OS === 'android' ? 25 : 20, // Adjust top padding if needed
+    paddingBottom: 16, // Consistent bottom padding
   },
-  welcomeText: {
-    fontSize: 28, // Larger font size
-    fontWeight: 'bold',
-    color: COLORS.black,
+  centeredContentWrapper: { // This might be redundant if container centers
+    flex: 1,
+    width: '100%', // Take full width
+    justifyContent: 'flex-start', // Align content to the top
+    alignItems: 'center', // Center items horizontally
+    paddingHorizontal: 0, // Remove padding here, apply to inner content if needed
   },
-  userName: {
-    color: COLORS.primaryPink, // Use darker pink
-  },
-  logoutButton: {
-    padding: 5, // Add some padding for easier tapping
+  mainContentArea: {
+    width: '100%',
+    paddingTop: 20, // Space from header
+    alignItems: 'center', // Center the main content block
   },
   mainContent: {
-    flex: 1,
-    width: '100%',
-    alignItems: 'center',
+    width: '90%', // Constrain content width
+    alignItems: 'center', // Center items within this block
+    paddingBottom: 32, // Add padding at the bottom of the main content block
+    backgroundColor: 'transparent', // Ensure content area doesn't block shapes
   },
-  pickupLineContainer: {
+  welcomeText: { // Updated for H1 style
+    fontSize: 24,
+    fontWeight: 'bold', // Make the whole welcome bold for emphasis
+    color: COLORS.black,
+    flexShrink: 1,
+    marginRight: 10,
+    // Removed nested Text for simplicity, apply bold/color directly
+  },
+  welcomePrefix: {
+    // Style removed, incorporated into welcomeText
+  },
+  userName: { // Keep specific styling for username color
+    color: COLORS.primaryPink, // Apply pink color directly
+    fontWeight: 'bold', // Ensure it remains bold
+  },
+  logoutButton: {
+    padding: 12, // Increased padding for better tap target
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: MIN_TAP_TARGET_SIZE,
+    minHeight: MIN_TAP_TARGET_SIZE,
+  },
+  pickupLineContainer: { // Base style
     width: '100%',
-    backgroundColor: COLORS.black,
-    borderRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 25,
+    backgroundColor: COLORS.black, // Default background
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
     marginBottom: 24,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4, },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 10,
   },
-  pickupLineHashtag: {
+  pickupLineContainerGiftOpen: { // Style for gift-open state
+      backgroundColor: COLORS.primaryPink, // Pink background when gift is open
+      shadowColor: COLORS.primaryPink, // Pink shadow
+  },
+  pickupLineHashtag: { // Base style
     position: 'absolute',
-    top: 8,
-    right: 15,
-    color: COLORS.secondaryPink,
+    top: 10,
+    right: 16,
+    color: COLORS.secondaryPink, // Default color
     fontSize: 12,
     fontWeight: '500',
+  },
+  pickupLineHashtagGiftOpen: { // Style for gift-open state
+      color: COLORS.white,
+      opacity: 0.8,
   },
   giftIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,215,0,0.15)',
+    backgroundColor: 'rgba(255, 215, 0, 0.25)', // Slightly stronger gold bg
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
-  pickupLineLabel: {
-    color: COLORS.secondaryPink,
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  pickupLineText: {
-    color: COLORS.white,
+  pickupLineText: { // Base style
+    color: COLORS.white, // Default color (on black)
     fontSize: 18,
     textAlign: 'center',
     fontWeight: '600',
     lineHeight: 24,
   },
-  progressContainer: {
-    width: 220,
-    height: 220,
+  pickupLineTextGiftOpen: { // Style for gift-open state
+      color: COLORS.white, // Ensure it's white on pink background too
+  },
+  progressContainer: { // Now wrapped by Animated.View for pulse
+    width: GAUGE_SIZE,
+    height: GAUGE_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
-    marginBottom: 32,
-    position: 'relative',
+    marginBottom: 16,
+    position: 'relative', // Needed for absolute positioning of overlay
   },
-  progressContainerWithGift: {
-    marginTop: 0,
-  },
-  progressBackgroundCircle: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    borderWidth: 15,
-    borderColor: '#F0F0F0',
-    position: 'absolute',
-    backgroundColor: 'transparent',
-  },
-  progressHalfCircleWrapper: {
-    width: 220,
-    height: 220,
-    position: 'absolute',
-    overflow: 'hidden',
-    borderRadius: 110,
-    transform: [{ rotate: '-135deg' }],
-  },
-  progressHalfCircle: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    borderWidth: 15,
-    borderColor: 'transparent',
-    borderRightColor: COLORS.primaryPink,
-    borderTopColor: COLORS.primaryPink,
-    transform: [{ rotate: '0deg' }],
-    backgroundColor: 'transparent',
-  },
-  progressContent: {
-    ...StyleSheet.absoluteFillObject,
+  progressContentTouchable: { // Absolutely positioned overlay for interactions
+    ...StyleSheet.absoluteFillObject, // Take up same space as SVG
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    borderRadius: GAUGE_SIZE / 2, // Make touchable area circular
+    padding: STROKE_WIDTH, // Ensure content inside doesn't overlap stroke visually
   },
-  smoothRizzContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.lightPink,
-    borderRadius: 30,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 32,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  scoreBubble: {
-    width: 40, // Fixed size for circular shape
-    height: 40,
-    borderRadius: 20, // Half of width/height
-    backgroundColor: COLORS.lighterPink, // Use lighter pink
-    justifyContent: 'center', // Center content vertically
-    alignItems: 'center', // Center content horizontally
-    marginHorizontal: 4,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  scoreText: {
-    fontSize: 15, // Adjusted size
-    fontWeight: 'bold',
-    color: COLORS.black,
-  },
-  smoothRizzText: {
-    fontSize: 14,
-    fontWeight: '500', // Slightly bolder
-    color: COLORS.black,
-    marginLeft: 6, // Adjust spacing
-    marginRight: 6, // Add spacing if needed between items
-  },
-  button: {
-    width: '100%',
-    paddingVertical: 18,
-    borderRadius: 30,
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  uploadButton: {
-    backgroundColor: COLORS.black,
-  },
-  uploadButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  manualButton: {
-    backgroundColor: COLORS.white,
-    borderWidth: 2, // Thicker border
-    borderColor: COLORS.black,
-    elevation: 2, // Lower elevation for outlined button
-    shadowOpacity: 0.05, // Less shadow
-  },
-  manualButtonText: {
-    color: COLORS.black,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  imageRatingButton: {
-    backgroundColor: COLORS.white,
-    borderWidth: 2, 
-    borderColor: COLORS.secondaryPink, // Use a different color like secondaryPink
-    elevation: 2,
-    shadowOpacity: 0.05,
-  },
-  imageRatingButtonText: {
-    color: COLORS.secondaryPink, // Match border color
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  percentageText: {
-    fontSize: 48, // Large font size for percentage
-    fontWeight: 'bold',
-    color: COLORS.primaryPink,
-  },
-  bottomNav: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: 70, // Adjust height as needed
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      alignItems: 'center',
-      backgroundColor: COLORS.white,
-      borderTopWidth: 1,
-      borderTopColor: COLORS.lightGrey,
-      shadowColor: "#000",
-      shadowOffset: {
-          width: 0,
-          height: -2, // Shadow upward
-      },
-      shadowOpacity: 0.05,
-      shadowRadius: 3,
-      elevation: 5,
-  },
-  navItem: {
-      alignItems: 'center',
-      padding: 10,
-  },
-  swipeCountText: {
-    fontSize: 56,
-    fontWeight: '600',
-    color: COLORS.primaryPink,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-    includeFontPadding: false,
-    marginBottom: -5,
-  },
-  swipeGoalText: {
-    fontSize: 28,
-    color: COLORS.textSecondary,
-    fontWeight: '400',
-    opacity: 0.8,
-    marginTop: -8,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-  },
-  swipesLeftText: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    marginTop: 8,
-    textAlign: 'center',
-    fontWeight: '500',
-    opacity: 0.9,
-    letterSpacing: 0.3,
-  },
-  swipesResetText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: 4,
-    textAlign: 'center',
-    fontWeight: '400',
-    opacity: 0.7,
-    fontStyle: 'italic',
-  },
-  tapToOpenText: {
-    fontSize: 16,
-    color: COLORS.primaryPink,
-    marginTop: 10,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  nextGiftText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-    textAlign: 'center',
-    fontWeight: '400',
-    opacity: 0.8,
-  },
-  giftContainer: {
+  progressContentInner: { // Inner container within touchable if needed
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
-  progressTextContainer: {
+  innerGiftWrapper: { // Ensure this style exists for rotation/scale/glow target
+      alignItems: 'center',
+      justifyContent: 'center',
+  },
+  statsRow: { // Flexbox is fine for this layout
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%', // Take full width available in mainContent
+    marginBottom: 24,
+    // Removed paddingHorizontal here, handled by card margin/padding or mainContent padding
+  },
+  statCard: { // Added transition hints, removed static shadow if animated
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primaryPink,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    width: '47%',
+    elevation: 4, // Keep base elevation for Android
+    minHeight: 110,
   },
-  remainingGiftsOverlay: {
-    position: 'absolute',
-    bottom: -45,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 1,
+  statIcon: {
+    marginBottom: 8, // Space between icon and text
   },
-  remainingGiftsOverlayText: {
-    fontSize: 16,
-    color: COLORS.primaryPink,
-    fontWeight: '600',
+  statLabel: { // Updated typography
+    fontSize: 16, // Consistent body text size
+    fontWeight: '500',
+    color: COLORS.darkGray, // Use dark gray
     textAlign: 'center',
+    lineHeight: 20, // Add line-height
   },
-  resetsText: {
-    fontSize: 13,
+  ctaContainer: { // Consistent spacing
+    width: '90%', // Match mainContent width
+    alignItems: 'center',
+    marginTop: 16, // Space above buttons
+  },
+  button: { // Base button style
+    width: '100%',
+    paddingVertical: 16, // var(--gap) ?
+    paddingHorizontal: 16,
+    borderRadius: 12, // var(--radius)
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16, // var(--gap)
+    minHeight: 50,
+  },
+  uploadButton: { // Primary button style - Glassmorphism adaptation
+    backgroundColor: COLORS.blackTransparent80, // Semi-transparent black
+    borderWidth: 1,
+    borderColor: COLORS.whiteTransparent20, // Subtle white border
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 }, // Adjusted shadow
+    shadowOpacity: 0.3, // Adjusted shadow
+    shadowRadius: 16, // Adjusted shadow
+    elevation: 10, // Higher elevation for glass effect
+    // Note: backdrop-filter is not available
+  },
+  uploadButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  manualButton: { // Secondary button style
+    backgroundColor: COLORS.white, // Ensure background is white
+    borderWidth: 2,
+    borderColor: COLORS.primaryPink,
+    // Remove default elevation/shadow if only border is desired
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  manualButtonText: {
+    color: COLORS.primaryPink,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  bottomNav: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: Platform.OS === 'ios' ? 90 : 75,
+      paddingBottom: Platform.OS === 'ios' ? 20 : 5,
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      backgroundColor: COLORS.white,
+      borderTopWidth: 1,
+      borderTopColor: COLORS.lightGrey,
+  },
+  navItem: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      minHeight: MIN_TAP_TARGET_SIZE + 25,
+  },
+  navLabel: {
+    fontSize: 10,
+    color: COLORS.textSecondary, // Default grey color
+    marginTop: 4, // Space between icon and label
+  },
+  navLabelActive: {
+    color: COLORS.primaryPink, // Active color
+    fontWeight: '600',
+  },
+  swipeCountText: { // Inside SVG overlay
+    fontSize: 42, // Adjust size as needed to fit
+    fontWeight: '600',
+    color: COLORS.primaryPink,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    includeFontPadding: false, // Try to align text better
+    textAlignVertical: 'center', // Try to align text better
+    // lineHeight: 48, // May not be needed if centered well
+  },
+  swipeGoalText: { // Inside SVG overlay
+    fontSize: 20, // Adjust size as needed
     color: COLORS.textSecondary,
-    fontStyle: 'italic',
-    marginTop: 2,
+    fontWeight: '400',
+    opacity: 0.8,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    // lineHeight: 24,
+  },
+  swipesHelperText: { // Below SVG gauge
+    fontSize: 16,
+    color: COLORS.darkGray, // --gray-500
+    marginTop: 16, // var(--gap)
+    textAlign: 'center',
+    fontWeight: '400',
+    lineHeight: 24,
+  },
+  swipesResetTextSmall: { // Below SVG gauge
+    fontSize: 16,
+    color: COLORS.darkGray,
+    marginTop: 4,
+    textAlign: 'center',
+    fontWeight: '400',
+    lineHeight: 24,
+    opacity: 0.8,
+  },
+  tooltipText: { // Style for the tooltip (State A)
+    fontSize: 14,
+    color: COLORS.darkGray, // --gray-500
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '500',
+    // opacity: 0; // Controlled by conditional rendering, not style fade
+  },
+  tapToOpenText: { // Inside SVG overlay (State B)
+    fontSize: 14,
+    color: COLORS.primaryPink,
+    marginTop: 8,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  modalContent: {
+  modalContent: { // Consistent padding/radius
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 20,
-    paddingHorizontal: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20, // Consistent padding
     maxHeight: '80%',
   },
-  modalHeader: {
+  modalHeader: { // Consistent spacing
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  modalTitle: {
-    fontSize: 20,
+  modalTitle: { // Consistent typography
+    fontSize: 22, // Slightly larger modal title
     fontWeight: 'bold',
     color: COLORS.black,
   },
   closeButton: {
-    padding: 5,
+    padding: 8, // Better tap target
   },
   modalScrollView: {
     maxHeight: '100%',
   },
-  inputLabel: {
-    fontSize: 16,
+  inputLabel: { // Consistent typography
+    fontSize: 16, // Match body text
     fontWeight: '600',
     color: COLORS.black,
     marginBottom: 8,
   },
-  textInput: {
+  textInput: { // Consistent styling
     borderWidth: 1,
     borderColor: COLORS.lightGrey,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-    fontSize: 16,
+    borderRadius: 12, // Consistent radius
+    padding: 16, // Consistent padding
+    marginBottom: 16, // Consistent margin
+    fontSize: 16, // Consistent font size
     backgroundColor: COLORS.white,
-    minHeight: 48,
+    minHeight: 50, // Min height
+    lineHeight: 20, // Added line height for multiline
   },
-  submitButton: {
+  submitButton: { // Inherit base button styles? Or keep separate? Keep separate for now.
     backgroundColor: COLORS.primaryPink,
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 16, // Consistent padding
+    borderRadius: 12, // Consistent radius
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 30, // Keep larger margin at bottom of modal
+    minHeight: 50,
   },
   submitButtonDisabled: {
     backgroundColor: COLORS.lightGrey,
@@ -1277,47 +1574,48 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   modeContainer: {
-    marginBottom: 20,
+    marginBottom: 16, // Consistent margin
   },
-  modeButton: {
+  modeButton: { // Consistent styling
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    padding: 16, // Consistent padding
     backgroundColor: COLORS.grey,
-    borderRadius: 12,
-    marginBottom: 10,
+    borderRadius: 12, // Consistent radius
+    marginBottom: 12, // Consistent margin
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  modeButtonSelected: {
+  modeButtonSelected: { // Consistent styling
     backgroundColor: COLORS.lightPink,
     borderColor: COLORS.primaryPink,
   },
   modeEmoji: {
     fontSize: 24,
-    marginRight: 15,
+    marginRight: 16, // Consistent spacing
   },
   modeTextContainer: {
     flex: 1,
   },
-  modeName: {
+  modeName: { // Consistent typography
     fontSize: 16,
     fontWeight: 'bold',
     color: COLORS.black,
     marginBottom: 4,
   },
-  modeDesc: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+  modeDesc: { // Consistent typography
+    fontSize: 14, // Slightly smaller for description
+    color: COLORS.darkGray, // Dark gray
+    lineHeight: 18,
   },
   spicyMeterContainer: {
-    marginBottom: 20,
+    marginBottom: 24, // Consistent margin
   },
-  spicyLabel: {
+  spicyLabel: { // Consistent typography
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.black,
-    marginBottom: 10,
+    marginBottom: 12, // Consistent margin
   },
   slider: {
     width: '100%',
@@ -1326,22 +1624,52 @@ const styles = StyleSheet.create({
   spicyLevels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 5,
+    marginTop: 8, // Consistent margin
   },
-  spicyLevelText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
+  spicyLevelText: { // Consistent typography
+    fontSize: 14, // Match mode desc
+    color: COLORS.darkGray, // Dark gray
   },
-  resetButton: {
-    backgroundColor: COLORS.secondaryPink,
-    marginTop: 8,
+  progressTextContainer: {
+    alignItems: 'center',
   },
-  resetButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: 'bold',
+  giftIcon: { // Added style for gift icon (needed for potential pulse on icon itself)
+      marginBottom: 8, // Add some space below icon before text/badge
   },
-  disabledButton: {
-    opacity: 0.7,
+  giftCountBadge: { // Style for the gift count badge
+      position: 'absolute',
+      top: -5, // Adjust position as needed
+      right: -10,
+      backgroundColor: COLORS.primaryPink,
+      borderRadius: 12,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      minWidth: 24,
+      height: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 1, // Ensure it's above the icon if overlapping
+      borderWidth: 1,
+      borderColor: COLORS.white,
+  },
+  giftCountText: { // Style for the text inside the badge
+      color: COLORS.white,
+      fontSize: 12,
+      fontWeight: 'bold',
+  },
+  giftRingOverlay: { // Style for the SVG ring container
+    ...StyleSheet.absoluteFillObject, // Position it over the gift icon area
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent', // Ensure it doesn't block visually
+  },
+  navUnderline: {
+      position: 'absolute',
+      bottom: 8, // Position near bottom of nav bar
+      left: 0, // Position is controlled by translateX
+      width: Dimensions.get('window').width / 4, // Width of one nav item
+      height: 3,
+      backgroundColor: COLORS.primaryPink,
+      borderRadius: 2,
   },
 });

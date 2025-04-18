@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Button, Image, StyleSheet, ActivityIndicator, Alert, FlatList } from 'react-native';
+import { View, Text, Button, Image, StyleSheet, ActivityIndicator, Alert, FlatList, TouchableOpacity, SafeAreaView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 // TODO: Replace with your actual backend API URL, possibly from environment variables
 const API_URL = 'https://mono-production-8ef9.up.railway.app';
@@ -26,10 +27,21 @@ interface SelectedImage {
     base64: string;
 }
 
+// Define Colors (you might want to import these from a central file)
+const COLORS = {
+    primaryPink: '#E11D74',
+    white: '#FFFFFF',
+    black: '#000000',
+    grey: '#F5F5F5',
+    textSecondary: '#666666',
+    lightGrey: '#E0E0E0',
+};
+
 export default function ImageRatingScreen() {
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
     const [ratedImages, setRatedImages] = useState<RatedImage[] | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    const router = useRouter();
 
     useEffect(() => {
         (async () => {
@@ -194,62 +206,89 @@ export default function ImageRatingScreen() {
      );
 
     return (
-        <View style={styles.container}>
-            <Stack.Screen options={{ title: 'Rate Top Images' }} />
-            <Text style={styles.title}>Select Up To 10 Images</Text>
+        <SafeAreaView style={styles.safeArea}>
+            <View style={styles.container}>
+                <Stack.Screen options={{ title: 'Rate Top Images' }} />
+                
+                <TouchableOpacity onPress={() => router.replace('/homepage')} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color={COLORS.primaryPink} />
+                    <Text style={styles.backButtonText}>Back to Home</Text>
+                </TouchableOpacity>
 
-            <Button title="Pick images from camera roll" onPress={pickImage} />
+                <Text style={styles.title}>Select Up To 10 Images</Text>
 
-            {isLoading && <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />}
+                <Button title="Pick images from camera roll" onPress={pickImage} />
 
-            {/* Display selected images before rating */}
-            {selectedImages.length > 0 && !ratedImages && !isLoading && (
-                <View style={styles.sectionContainer}>
-                    <Text style={styles.subtitle}>Selected Images:</Text>
-                    <FlatList
-                        data={selectedImages}
-                        renderItem={renderSelectedImage}
-                        keyExtractor={(item, index) => index.toString()}
-                        numColumns={3} // Adjust number of columns as needed
-                        style={styles.thumbnailGrid}
-                        columnWrapperStyle={styles.thumbnailRow}
-                        ListFooterComponent={() => ( // Add the rate button inside the list as footer
-                          <View style={styles.buttonContainer}>
-                            <Button title={`Rate ${selectedImages.length} Image(s)`} onPress={rateImages} disabled={isLoading} />
-                          </View>
-                        )}
-                    />
-                 </View>
-            )}
+                {isLoading && <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />}
+
+                {/* Display selected images before rating */}
+                {selectedImages.length > 0 && !ratedImages && !isLoading && (
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.subtitle}>Selected Images:</Text>
+                        <FlatList
+                            data={selectedImages}
+                            renderItem={renderSelectedImage}
+                            keyExtractor={(item, index) => index.toString()}
+                            numColumns={3} // Adjust number of columns as needed
+                            style={styles.thumbnailGrid}
+                            columnWrapperStyle={styles.thumbnailRow}
+                            ListFooterComponent={() => ( // Add the rate button inside the list as footer
+                              <View style={styles.buttonContainer}>
+                                <Button title={`Rate ${selectedImages.length} Image(s)`} onPress={rateImages} disabled={isLoading} />
+                              </View>
+                            )}
+                        />
+                     </View>
+                )}
 
 
-            {/* Display rated and sorted images */}
-            {ratedImages && !isLoading && (
-                 <View style={styles.sectionContainer}>
-                    <Text style={styles.subtitle}>Rated Images (Best First):</Text>
-                    <FlatList
-                        data={ratedImages}
-                        renderItem={renderRatedImage}
-                        keyExtractor={(item) => item.uri} // Use URI as key after rating
-                        style={styles.ratedList}
-                    />
-                 </View>
-            )}
-        </View>
+                {/* Display rated and sorted images */}
+                {ratedImages && !isLoading && (
+                     <View style={styles.sectionContainer}>
+                        <Text style={styles.subtitle}>Rated Images (Best First):</Text>
+                        <FlatList
+                            data={ratedImages}
+                            renderItem={renderRatedImage}
+                            keyExtractor={(item) => item.uri} // Use URI as key after rating
+                            style={styles.ratedList}
+                        />
+                     </View>
+                )}
+            </View>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+        backgroundColor: COLORS.grey, 
+    },
     container: {
-        flex: 1, // Use flex: 1 instead of flexGrow: 1 for View container
+        flex: 1,
         alignItems: 'center',
         padding: 20,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: COLORS.grey,
     },
-    sectionContainer: { // Added container for each section (selected/rated)
+    backButton: {
+        position: 'absolute',
+        top: 20,
+        left: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 8,
+        zIndex: 1,
+    },
+    backButtonText: {
+        marginLeft: 5,
+        fontSize: 16,
+        color: COLORS.primaryPink,
+        fontWeight: '600',
+    },
+    sectionContainer: {
         width: '100%',
-        alignItems: 'center', // Center content within the section
-        flex: 1, // Allow section to grow and enable FlatList scrolling
+        alignItems: 'center',
+        flex: 1,
     },
     title: {
         fontSize: 22,
@@ -270,7 +309,7 @@ const styles = StyleSheet.create({
          marginTop: 10,
      },
      thumbnailRow: {
-         justifyContent: 'space-around', // Adjust spacing between thumbnails
+         justifyContent: 'space-around',
          marginBottom: 10,
      },
      selectedImageThumbnail: {
@@ -280,27 +319,26 @@ const styles = StyleSheet.create({
          borderWidth: 1,
          borderColor: '#ccc',
      },
-    image: { // Style for the main rated image display
-        width: '100%', // Take full width of container
-        aspectRatio: 4 / 3, // Maintain aspect ratio
-        // height: 300, // Fixed height might distort some images
-        marginBottom: 5, // Space between image and rating text
+    image: {
+        width: '100%',
+        aspectRatio: 4 / 3,
+        marginBottom: 5,
         borderRadius: 5,
     },
     ratedImageContainer: {
-        width: '95%', // Container for each rated image + text
+        width: '95%',
         backgroundColor: '#fff',
         borderRadius: 8,
         padding: 10,
         marginBottom: 15,
-        alignItems: 'center', // Center image and text block
+        alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
         elevation: 3,
     },
-    ratingOverlay: { // Container for the rating text below the image
+    ratingOverlay: {
        padding: 8,
        width: '100%',
     },
@@ -311,25 +349,24 @@ const styles = StyleSheet.create({
        textAlign: 'center',
        marginBottom: 5,
     },
-    ratingText: { // Text explaining the rating
-        fontSize: 14, // Smaller font for the explanation
+    ratingText: {
+        fontSize: 14,
         color: '#555',
         textAlign: 'center',
         lineHeight: 18,
     },
-    buttonContainer: { // Adjusted margin for when it's inside the FlatList footer
+    buttonContainer: {
         marginTop: 20,
-        marginBottom: 30, // Add some bottom margin
+        marginBottom: 30,
         width: '80%',
-        alignSelf: 'center', // Center the button
+        alignSelf: 'center',
     },
     loader: {
         marginTop: 30,
         marginBottom: 20,
     },
     ratedList: {
-        width: '100%', // Ensure FlatList takes width
+        width: '100%',
         marginTop: 10,
     },
-    // Removed unused styles: ratingContainer, ratingTitle
 }); 

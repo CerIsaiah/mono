@@ -46,6 +46,12 @@ export default function ChooseContextScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Add Back Button Here */}
+      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.primaryPink} />
+          <Text style={styles.backButtonText}>Back</Text>
+      </TouchableOpacity>
+
       <ScrollView contentContainerStyle={styles.scrollViewContainer}>
         <View style={styles.container}>
           {/* Header Section */}
@@ -101,13 +107,31 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.lightPinkBackground, // Light pink background for the whole screen
+    position: 'relative', // Needed for absolute positioning of back button
   },
    scrollViewContainer: {
      flexGrow: 1,
+     paddingTop: 60, // Add padding to avoid overlap with back button
    },
   container: {
     flex: 1,
     padding: 20,
+    alignItems: 'center', // Center items horizontally in the container
+  },
+  backButton: { // Style for the back button
+    position: 'absolute',
+    top: 50, // Adjust top spacing (consider safe area insets)
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    zIndex: 10, // Ensure it's above ScrollView content
+  },
+  backButtonText: { // Style for the button text
+    marginLeft: 5,
+    fontSize: 16,
+    color: COLORS.primaryPink,
+    fontWeight: '600',
   },
   headerContainer: {
     flexDirection: 'row',

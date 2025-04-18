@@ -65,10 +65,10 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
     const supabase = getSupabaseClient();
 
     try {
-        // Get user data including total usage
+        // Fetch necessary user data
         const { data: userData, error: fetchError } = await supabase
             .from('users')
-            .select('copy_count, login_timestamps, daily_usage, seen_pickup_lines')
+            .select('copy_count, login_timestamps, daily_usage, seen_pickup_lines, daily_gifts_completed') // Include new mock field
             .eq('email', userEmail)
             .maybeSingle();
 
@@ -84,21 +84,20 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
         if (!userData) {
             logger.warn('User not found for stats request', { email: userEmail });
             // Return default stats if user not found
-            return res.status(200).json({ 
-                boostedConvos: 0, 
+            return res.status(200).json({
+                boostedConvos: 0,
                 daysActive: 0,
                 currentSwipes: 0,
-                nextGiftThreshold: SWIPES_PER_GIFT,
-                currentPickupLine: null,
-                hasSeenCurrentGift: false
+                earnedGiftsToday: 0, // Changed name
+                dailyCompletedGifts: 0 // Changed name
+                // Removed pickup line logic from here
             });
         }
 
         const boostedConvos = userData.copy_count || 0;
         const dailySwipes = userData.daily_usage || 0;
-        const seenPickupLines = userData.seen_pickup_lines || [];
-        const totalAvailableGifts = Math.floor(dailySwipes / SWIPES_PER_GIFT);
-        const completedGifts = seenPickupLines.length;
+        const dailyCompletedGifts = userData.daily_gifts_completed || 0; // Use new field
+        const earnedGiftsToday = Math.floor(dailySwipes / SWIPES_PER_GIFT);
 
         // Calculate unique days active
         let daysActive = 0;
@@ -120,80 +119,24 @@ router.get('/user-stats', authenticateUser, async (req: Request, res: Response) 
             daysActive = uniqueDays.size;
         }
 
-        // Calculate next gift threshold based on daily swipes
-        const nextGiftThreshold = Math.ceil(dailySwipes / SWIPES_PER_GIFT) * SWIPES_PER_GIFT;
-        
-        // Only fetch a new pickup line if there are unclaimed gifts
-        let currentLineText = null;
-        let hasSeenCurrentGift = false;
+        // REMOVED pickup line fetching logic from here
 
-        if (totalAvailableGifts > completedGifts) {
-            // Get all pickup lines from the database
-            let query = supabase
-                .from('pickup_lines')
-                .select('id, line')
-                .eq('is_active', true);
-                
-            // Only add the not-in condition if there are seen pickup lines
-            if (seenPickupLines.length > 0) {
-                query = query.not('id', 'in', `(${seenPickupLines.join(',')})`);
-            }
-            
-            const { data: availableLines, error: linesError } = await query;
-
-            if (linesError) {
-                logger.error('Error fetching pickup lines', {
-                    email: userEmail,
-                    error: linesError.message,
-                    stack: linesError.stack
-                });
-            } else if (availableLines && availableLines.length > 0) {
-                // Select a random pickup line
-                const selectedLine = availableLines[Math.floor(Math.random() * availableLines.length)];
-                currentLineText = selectedLine.line;
-                
-                // Update seen pickup lines
-                const updatedSeenLines = [...seenPickupLines, selectedLine.id];
-                const { error: updateError } = await supabase
-                    .from('users')
-                    .update({ seen_pickup_lines: updatedSeenLines })
-                    .eq('email', userEmail);
-
-                if (updateError) {
-                    logger.error('Error updating seen pickup lines', {
-                        email: userEmail,
-                        lineId: selectedLine.id,
-                        error: updateError.message,
-                        stack: updateError.stack
-                    });
-                }
-            } else {
-                // If no lines available, create a default one
-                currentLineText = "You're looking smooth today! 😎";
-            }
-        }
-
-        logger.info('Successfully fetched user stats', { 
-            email: userEmail, 
-            boostedConvos, 
+        logger.info('Successfully fetched user stats', {
+            email: userEmail,
+            boostedConvos,
             daysActive,
             dailySwipes,
-            nextGiftThreshold,
-            hasSeenCurrentGift,
-            completedGifts,
-            totalAvailableGifts,
-            hasPickupLine: !!currentLineText
+            earnedGiftsToday, // Changed name
+            dailyCompletedGifts // Changed name
         });
 
-        res.status(200).json({ 
-            boostedConvos, 
+        res.status(200).json({
+            boostedConvos,
             daysActive,
             currentSwipes: dailySwipes,
-            nextGiftThreshold,
-            currentPickupLine: currentLineText,
-            hasSeenCurrentGift,
-            completedGifts,
-            totalAvailableGifts
+            earnedGiftsToday, // Changed name
+            dailyCompletedGifts // Changed name
+            // Removed pickup line, hasSeenCurrentGift etc.
         });
 
     } catch (error: any) {
@@ -212,141 +155,153 @@ router.post('/reset-daily-swipes', authenticateUser, async (req: Request, res: R
     const supabase = getSupabaseClient();
 
     try {
-        // Reset the daily usage for the user
+        // Reset daily usage AND daily completed gifts
         const { error: updateError } = await supabase
             .from('users')
-            .update({ daily_usage: 0 })
+            .update({ daily_usage: 0, daily_gifts_completed: 0 }) // Reset both fields
             .eq('email', userEmail);
 
         if (updateError) {
-            logger.error('Error resetting daily swipes', {
+            logger.error('Error resetting daily stats', {
                 email: userEmail,
                 error: updateError.message,
                 stack: updateError.stack
             });
-            return res.status(500).json({ error: 'Failed to reset daily swipes' });
+             return res.status(500).json({ error: 'Failed to reset daily stats' });
         }
 
-        logger.info('Successfully reset daily swipes', { email: userEmail });
-        res.status(200).json({ success: true, message: 'Daily swipes reset successfully' });
+        logger.info('Successfully reset daily swipes and completed gifts', { email: userEmail });
+        res.status(200).json({ success: true, message: 'Daily stats reset successfully' });
 
     } catch (error: any) {
-        logger.error('Error resetting daily swipes', {
+        logger.error('Error resetting daily stats', {
             email: userEmail,
             error: error.message,
             stack: error.stack
         });
-        res.status(500).json({ error: 'Internal server error while resetting swipes' });
+        res.status(500).json({ error: 'Internal server error while resetting stats' });
     }
 });
 
-// POST /api/get-next-pickup-line
+// POST /api/get-next-pickup-line - Refactored for Daily Logic
 router.post('/get-next-pickup-line', authenticateUser, async (req: Request, res: Response) => {
     const userEmail = (req as any).userEmail;
     const supabase = getSupabaseClient();
 
     try {
-        // Get user data including seen pickup lines
+        // Get user data: daily usage, daily completed, and lifetime seen lines
         const { data: userData, error: fetchError } = await supabase
             .from('users')
-            .select('daily_usage, seen_pickup_lines')
+            .select('daily_usage, daily_gifts_completed, seen_pickup_lines') // Fetch required fields
             .eq('email', userEmail)
-            .single();
+            .single(); // Use single() as user must exist to claim gift
 
-        if (fetchError) {
-            logger.error('Error fetching user data for pickup line', {
+        if (fetchError || !userData) {
+            logger.error('Error fetching user data for pickup line or user not found', {
                 email: userEmail,
-                error: fetchError.message
+                error: fetchError?.message
             });
-            return res.status(500).json({ error: 'Failed to fetch user data' });
+            return res.status(fetchError && fetchError.code === 'PGRST116' ? 404 : 500).json({ error: 'Failed to fetch user data or user not found' });
         }
 
-        if (!userData) {
-            logger.warn('User not found for pickup line request', { email: userEmail });
-            return res.status(404).json({ error: 'User not found' });
-        }
+        const dailySwipes = userData.daily_usage || 0;
+        const dailyGiftsCompleted = userData.daily_gifts_completed || 0;
+        const seenPickupLines = userData.seen_pickup_lines || []; // Lifetime seen
+        const earnedToday = Math.floor(dailySwipes / SWIPES_PER_GIFT);
 
-        const seenPickupLines = userData.seen_pickup_lines || [];
-        const totalAvailableGifts = Math.floor(userData.daily_usage / SWIPES_PER_GIFT);
-
-        // Only proceed if user has unclaimed gifts
-        if (seenPickupLines.length >= totalAvailableGifts) {
-            logger.warn('No unclaimed gifts available', {
+        // Check if a gift is actually available based on TODAY's numbers
+        if (earnedToday <= dailyGiftsCompleted) {
+            logger.warn('No unclaimed gifts available for today', {
                 email: userEmail,
-                seenCount: seenPickupLines.length,
-                totalAvailable: totalAvailableGifts
+                earnedToday,
+                dailyGiftsCompleted
             });
-            return res.status(400).json({ error: 'No unclaimed gifts available' });
+            return res.status(400).json({ error: 'No unclaimed gifts available for today' });
         }
 
-        // Get all pickup lines
+        // Fetch an available pickup line (not seen in lifetime)
         let query = supabase
             .from('pickup_lines')
             .select('id, line')
             .eq('is_active', true);
-        
-        // Only add the not-in condition if there are seen pickup lines
+
         if (seenPickupLines.length > 0) {
             query = query.not('id', 'in', `(${seenPickupLines.join(',')})`);
         }
-        
-        const { data: availableLines, error: linesError } = await query.order('id');
+
+        const { data: availableLines, error: linesError } = await query.order('id'); // Order for consistency if needed
 
         if (linesError) {
-            logger.error('Error fetching pickup lines', {
-                email: userEmail,
-                error: linesError.message
-            });
+            logger.error('Error fetching pickup lines', { email: userEmail, error: linesError.message });
             return res.status(500).json({ error: 'Failed to fetch pickup lines' });
         }
 
         if (!availableLines || availableLines.length === 0) {
-            logger.error('No pickup lines available', {
-                email: userEmail,
-                seenCount: seenPickupLines.length
-            });
-            return res.status(500).json({ error: 'No pickup lines available' });
+            // Handle case where user earned a gift but no new lines are left
+             logger.warn('No new pickup lines available despite available gift', { email: userEmail });
+             // You might want a pool of generic fallback lines here
+            const fallbackLine = { id: -1, line: "You've unlocked all our lines... for now! 😉" }; // Example fallback
+            
+             // Still increment daily count even if showing fallback
+             const newDailyCompletedCount = dailyGiftsCompleted + 1;
+             const { error: fallbackUpdateError } = await supabase
+                 .from('users')
+                 .update({ daily_gifts_completed: newDailyCompletedCount })
+                 .eq('email', userEmail);
+
+             if (fallbackUpdateError) {
+                 logger.error('Error incrementing daily gift count on fallback', { email: userEmail, error: fallbackUpdateError.message });
+                 // Decide if you should still return the fallback line or error out
+                 return res.status(500).json({ error: 'Failed to update daily gift count' });
+             }
+
+             logger.info('Provided fallback pickup line', { email: userEmail, newDailyCompletedCount, earnedToday });
+             return res.json({
+                 success: true,
+                 pickupLine: fallbackLine.line,
+                 dailyCompletedGifts: newDailyCompletedCount,
+                 earnedGiftsToday: earnedToday
+             });
         }
 
-        // Select a random pickup line from available ones
+        // Select a random available line
         const selectedLine = availableLines[Math.floor(Math.random() * availableLines.length)];
 
-        // Add this line to user's seen pickup lines
-        const updatedSeenLines = [...seenPickupLines, selectedLine.id];
+        // Increment daily completed count and update lifetime seen lines
+        const newDailyCompletedCount = dailyGiftsCompleted + 1;
+        const updatedSeenLines = [...seenPickupLines, selectedLine.id]; // Add to lifetime seen
+
         const { error: updateError } = await supabase
             .from('users')
-            .update({ seen_pickup_lines: updatedSeenLines })
+            .update({
+                daily_gifts_completed: newDailyCompletedCount,
+                seen_pickup_lines: updatedSeenLines
+            })
             .eq('email', userEmail);
 
         if (updateError) {
-            logger.error('Error updating seen pickup lines', {
-                email: userEmail,
-                error: updateError.message
-            });
-            return res.status(500).json({ error: 'Failed to update seen pickup lines' });
+            logger.error('Error updating daily count and seen lines', { email: userEmail, error: updateError.message });
+            // Don't return the line if the update failed, state is inconsistent
+            return res.status(500).json({ error: 'Failed to claim gift' });
         }
 
-        logger.info('Successfully provided new pickup line', {
+        logger.info('Successfully provided new pickup line and updated counts', {
             email: userEmail,
             lineId: selectedLine.id,
-            seenCount: updatedSeenLines.length,
-            totalAvailable: totalAvailableGifts
+            newDailyCompletedCount,
+            earnedToday
         });
 
         res.json({
             success: true,
             pickupLine: selectedLine.line,
-            completedGifts: updatedSeenLines.length,
-            totalAvailableGifts
+            dailyCompletedGifts: newDailyCompletedCount, // Return the updated daily count
+            earnedGiftsToday: earnedToday // Return today's earned total
         });
 
     } catch (error: any) {
-        logger.error('Error getting next pickup line', {
-            email: userEmail,
-            error: error.message,
-            stack: error.stack
-        });
-        res.status(500).json({ error: 'Internal server error while getting pickup line' });
+        logger.error('Error in get-next-pickup-line', { email: userEmail, error: error.message, stack: error.stack });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

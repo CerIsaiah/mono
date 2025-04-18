@@ -46,6 +46,12 @@ export default function UploadScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Add Back Button Here */}
+      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <Ionicons name="arrow-back" size={24} color={COLORS.primaryPink} />
+        <Text style={styles.backButtonText}>Back</Text>
+      </TouchableOpacity>
+
       <View style={styles.container}>
         {/* Header Section */}
         <View style={styles.headerContainer}>
@@ -75,11 +81,29 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.white,
+    position: 'relative', // Needed for absolute positioning
   },
   container: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'flex-start', // Align content to the top
     padding: 20,
+    paddingTop: 80, // Add padding to avoid overlap with back button
+  },
+  backButton: { // Style for the back button
+    position: 'absolute',
+    top: 50, // Adjust top spacing (consider safe area insets)
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    zIndex: 10, // Ensure it's above other content
+  },
+  backButtonText: { // Style for the button text
+    marginLeft: 5,
+    fontSize: 16,
+    color: COLORS.primaryPink,
+    fontWeight: '600',
   },
   headerContainer: {
     flexDirection: 'row',

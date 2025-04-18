@@ -68,15 +68,12 @@ function ProtectedLayoutNav() {
       {/* Main App Screens (Access controlled by redirect logic above) */}
       <Stack.Screen name="homepage" />
       <Stack.Screen name="upload" options={{
-          headerShown: true,
           title: 'Upload Screenshot'
       }} />
       <Stack.Screen name="choose-context" options={{
-          headerShown: true,
           title: 'Choose Context'
       }} />
       <Stack.Screen name="swipes-page" options={{
-          headerShown: true,
           title: 'Your Rizzponses'
       }} />
       {/* Keep the old login screen definition but logic redirects away if authenticated */}

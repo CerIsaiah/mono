@@ -40,21 +40,25 @@ const COLORS = {
   lightPinkBackground: '#FFF0F5',
   white: '#FFFFFF',
   black: '#000000',
-  textPrimary: '#333333',
-  textSecondary: '#888888',
+  textPrimary: '#212121', // Darker for better contrast
+  textSecondary: '#757575', // Slightly adjusted gray
   errorRed: '#D32F2F',
-  lightGray: '#E8E8E8',
-  mediumGray: '#CCCCCC',
-  darkGray: '#666666',
+  lightGray: '#F5F5F5', // Lighter gray for backgrounds/borders
+  mediumGray: '#BDBDBD', // Adjusted medium gray
+  darkGray: '#616161',  // Adjusted dark gray
   premiumGradientStart: '#E11D74', // Pink
   premiumGradientEnd: '#AE2EFF', // Purple (Approximation)
   green: '#4CAF50',
+  blue: '#2196F3', // Added a blue for accents if needed
+  lightBlueBackground: '#E3F2FD', // Example light blue
 };
 
 // Card Component (Styling adapted from web version)
 const ResponseCard = ({ cardText }: { cardText: string }) => (
   <View style={styles.card}>
-    <Text style={styles.cardText}>{cardText}</Text>
+    <ScrollView contentContainerStyle={styles.cardScrollContent}>
+       <Text style={styles.cardText}>{cardText}</Text>
+    </ScrollView>
     {/* Removed swipe indicators, rn-swiper-list uses overlay labels */}
   </View>
 );
@@ -62,12 +66,14 @@ const ResponseCard = ({ cardText }: { cardText: string }) => (
 // Overlay Label Components (Example)
 const OverlayLabelLeft = () => (
     <View style={[styles.overlayLabelContainer, styles.overlayLabelLeft]}>
-        <Text style={styles.overlayLabelText}>NOPE</Text>
+        <Ionicons name="close-circle-outline" size={48} color={COLORS.white} />
+        {/* <Text style={styles.overlayLabelText}>NOPE</Text> */}
     </View>
 );
 const OverlayLabelRight = () => (
     <View style={[styles.overlayLabelContainer, styles.overlayLabelRight]}>
-        <Text style={styles.overlayLabelText}>SAVE</Text>
+         <Ionicons name="heart-circle-outline" size={48} color={COLORS.white} />
+        {/* <Text style={styles.overlayLabelText}>SAVE</Text> */}
     </View>
 );
 
@@ -124,6 +130,7 @@ export default function SwipesPage() {
   const [usageCount, setUsageCount] = useState<number>(0);
   const [isPremium, setIsPremium] = useState<boolean>(false);
   const [learningPercentage, setLearningPercentage] = useState<number>(0);
+  const [swipedAll, setSwipedAll] = useState<boolean>(false); // State to track if all cards are swiped
   const swiperRef = useRef<SwiperCardRefType>(null);
 
   // Add dependency tracking for params with proper typing
@@ -268,6 +275,7 @@ export default function SwipesPage() {
       setSwiperKey(prev => prev + 1);
       setError(null);
       setCanSwipe(true);
+      setSwipedAll(false); // Reset swipedAll state on successful generation
 
     } catch (error) {
       console.error('Error generating responses:', error);
@@ -411,34 +419,41 @@ export default function SwipesPage() {
 
   // Use the index from rn-swiper-list callback
   const handleSwipeLeft = (index: number) => {
+      // Check if the swipe should actually happen (e.g., based on canSwipe)
+      // The library might call this even if the swipe is visually prevented
+      if (!canSwipe) return;
       handleSwipe(index, 'left');
   };
 
   const handleSwipeRight = (index: number) => {
+      // Check if the swipe should actually happen (e.g., based on canSwipe)
+      if (!canSwipe) return;
       handleSwipe(index, 'right');
   };
 
   const handleSwipedAll = () => {
     console.log('Swiped all cards!');
-    console.log('[DEBUG] handleSwipedAll: Queueing state updates.');
-    // Delay state updates slightly to allow animation to finish
-    // setTimeout(() => {
-        setError("You've seen all responses for this image. Regenerate or go back."); // Inform user
-        console.log('[DEBUG] handleSwipedAll: Setting canSwipe to false (reverted).');
-        // Ensure swiping stops if not already stopped
-        setCanSwipe(false);
-    // }, 100); // 100ms delay, adjust if needed
+    setSwipedAll(true); // Set swipedAll to true
+    // Ensure swiping stops if not already stopped
+    setCanSwipe(false);
   };
 
   // Handle regenerate
   const handleRegenerate = async () => {
     if (isGenerating) return;
     
+    // Ensure we use the initial data for regeneration
     try {
       if (textContext && textLastMessage) {
+        console.log('[DEBUG] Regenerating with text:', { context: textContext, lastText: textLastMessage });
         await generateResponses(null, textContext, textLastMessage);
-      } else if (base64Data) {
-        await generateResponses(base64Data);
+      } else if (initialBase64Data) { // Use initialBase64Data here
+        console.log('[DEBUG] Regenerating with initial image.');
+        await generateResponses(initialBase64Data); // Pass initialBase64Data
+      } else {
+         // This case should ideally not happen if the button is shown correctly
+         console.warn('[DEBUG] handleRegenerate called without valid initial data.');
+         Alert.alert('Error', 'Cannot regenerate without initial context or image.');
       }
     } catch (error) {
       console.error('Error regenerating responses:', error);
@@ -447,8 +462,9 @@ export default function SwipesPage() {
   };
 
   const renderCard = useCallback((cardData: string, cardIndex: number) => {
-      return <ResponseCard key={`card-${cardIndex}`} cardText={cardData} />;
-  }, []);
+      // Use a unique key involving both swiperKey and cardIndex if needed
+      return <ResponseCard key={`card-${swiperKey}-${cardIndex}`} cardText={cardData} />;
+  }, [swiperKey]); // Add swiperKey dependency
 
   // Loading state for initial fetch
   if (isLoading) {
@@ -485,13 +501,13 @@ export default function SwipesPage() {
         {/* Header Area */}
         <View style={styles.headerContainer}>
            {/* Close Button */}
-           <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+           <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
                 <Ionicons name="close" size={28} color={COLORS.darkGray} />
            </TouchableOpacity>
 
             {/* Optional: Add Saved Button - Ensure route exists */}
-            <TouchableOpacity style={styles.savedButton} onPress={() => router.push('/saved' as any)}>
-                 <Ionicons name="heart-outline" size={24} color={COLORS.darkGray} />
+            <TouchableOpacity style={styles.savedButton} onPress={() => router.push('/saved-responses' as any)}>
+                 <Ionicons name="heart-outline" size={20} color={COLORS.primaryPink} />
                  <Text style={styles.savedButtonText}>Saved</Text>
             </TouchableOpacity>
         </View>
@@ -500,102 +516,112 @@ export default function SwipesPage() {
         <View style={styles.learningBarContainer}>
             <View style={styles.learningBarLabelContainer}>
                 <View style={styles.learningBarLabel}>
-                   <Ionicons name="star" size={12} color={COLORS.primaryPink} />
-                   <Text style={styles.learningBarText}>AI Learning</Text>
+                   <Ionicons name="sparkles-outline" size={14} color={COLORS.primaryPink} />
+                   <Text style={styles.learningBarText}>AI Learning Progress</Text>
                 </View>
                 {!isPremium && (
-                    <TouchableOpacity onPress={() => router.push('/profile' as any)}> // Cast as any
+                    <TouchableOpacity onPress={() => router.push('/profile' as any)}>
                         <Text style={styles.upgradeText}>Upgrade →</Text>
                     </TouchableOpacity>
                 )}
             </View>
             <View style={styles.progressBarBackground}>
+                 {/* TODO: Implement gradient or use premium color */}
                  <View style={[
                     styles.progressBarForeground,
-                    { width: `${learningPercentage}%` },
-                    isPremium && styles.premiumProgressBar // Apply gradient/different color if premium
+                    { width: `${Math.max(5, learningPercentage)}%` }, // Ensure minimum width for visibility
+                    isPremium && styles.premiumProgressBar
                  ]} />
             </View>
             <View style={styles.learningBarLabelContainer}>
                  <Text style={[styles.learningPercentageText, isPremium && styles.premiumPercentageText]}>
                     {learningPercentage}% Learned
                  </Text>
-                 {!isPremium && (
-                     <Text style={styles.learningHintText}>Upgrade for better matches</Text>
-                 )}
+                 {/* Removed hint text - implied by upgrade button */}
             </View>
         </View>
 
-        {/* Swiper Area */}
-        {responses.length > 0 ? (
-          <View style={styles.swiperContainer}>
+        {/* Swiper Area - Takes up remaining space */}
+        <View style={styles.swiperContainer}>
+          {/* Render Swiper or "Swiped All/No Responses" state */}
+          {!swipedAll && responses.length > 0 ? (
             <Swiper
               ref={swiperRef}
-              key={swiperKey} // Add key for regeneration reset
+              key={swiperKey}
               data={responses}
               renderCard={renderCard}
-              onSwipeLeft={handleSwipeLeft}    // Pass index
-              onSwipeRight={handleSwipeRight}  // Pass index
+              onSwipeLeft={handleSwipeLeft}
+              onSwipeRight={handleSwipeRight}
               onSwipedAll={handleSwipedAll}
-              cardStyle={styles.swiperCardStyle}
+              cardStyle={styles.swiperCardStyle} // Adjust card style within Swiper
               OverlayLabelLeft={OverlayLabelLeft}
               OverlayLabelRight={OverlayLabelRight}
-              // animateCardOpacity // Removed invalid prop
-              // Removed invalid props: stackSize, stackSeparation, stackScale, disableLeftSwipe, disableRightSwipe, infinite, cardIndex
-              // Swipe disabling is handled in handleSwipe
+              // Ensure swipe is disabled visually/logically via `canSwipe` state
+              // The library itself doesn't have direct disable props based on state easily
+              // We handle this logic in `handleSwipe` and disabling buttons below
             />
-          </View>
-        ) : (
-           // Show message if no responses and not loading/generating
-           !isLoading && !isGenerating && (
-                <View style={styles.centeredContainer}>
-                    <Text style={styles.infoText}>{error || 'No responses generated.'}</Text>
-                     {/* Show regenerate button here too if applicable */}
-                     {initialBase64Data && textContext && (
-                         <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate} disabled={isGenerating}>
-                             <Ionicons name="refresh" size={18} color={COLORS.white} />
-                             <Text style={styles.actionButtonText}>Regenerate</Text>
-                         </TouchableOpacity>
-                     )}
-                    <TouchableOpacity style={styles.outlineButton} onPress={() => router.back()}>
-                         <Ionicons name="camera-outline" size={18} color={COLORS.primaryPink} />
-                        <Text style={styles.outlineButtonText}>New Screenshot</Text>
+          ) : (
+            // Show message if no responses and not loading/generating, OR if swiped all
+            !isLoading && !isGenerating && (
+              <View style={styles.centeredMessageContainer}>
+                <Ionicons
+                   name={swipedAll ? "checkmark-done-circle-outline" : "information-circle-outline"}
+                   size={60}
+                   color={swipedAll ? COLORS.green : COLORS.mediumGray}
+                   style={{ marginBottom: 15 }}
+                 />
+                <Text style={styles.infoText}>
+                  {swipedAll
+                      ? "You've reviewed all responses!"
+                      : error || 'No responses available right now.'
+                  }
+                </Text>
+                {/* Show regenerate/new screenshot buttons */}
+                <View style={styles.centeredActionButtons}>
+                  {(swipedAll || responses.length === 0) && (initialBase64Data || (textContext && textLastMessage)) && (
+                    <TouchableOpacity style={[styles.actionButton, styles.regenerateButton]} onPress={handleRegenerate} disabled={isGenerating}>
+                      <Ionicons name="refresh" size={18} color={COLORS.white} />
+                      <Text style={styles.actionButtonText}>Regenerate</Text>
                     </TouchableOpacity>
+                  )}
+                   <TouchableOpacity style={[styles.outlineButton, styles.newScreenshotButton]} onPress={() => router.back()}>
+                       <Ionicons name="camera-outline" size={18} color={COLORS.primaryPink} />
+                       <Text style={styles.outlineButtonText}>New Screenshot</Text>
+                   </TouchableOpacity>
                 </View>
+              </View>
             )
-        )}
+          )}
+        </View>
 
-        {/* Footer Area (Swipe Counter and Buttons) */}
-        {responses.length > 0 && !isLoading && !isGenerating && (
+        {/* Footer Area (Manual Swipe Buttons & Counter) - Render conditionally */}
+        {!swipedAll && responses.length > 0 && !isLoading && !isGenerating && (
             <View style={styles.footerContainer}>
-                {/* Swipe Counter */}
-                <Text style={styles.swipeCounterText}>{swipesLeftText}</Text>
-
-                 {/* Action Buttons */}
-                 <View style={styles.footerButtonsContainer}>
-                     <TouchableOpacity style={styles.outlineButton} onPress={() => router.back()}>
-                         <Ionicons name="camera-outline" size={20} color={COLORS.primaryPink} />
-                         <Text style={styles.outlineButtonText}>New Screenshot</Text>
-                     </TouchableOpacity>
-                     {/* Show regenerate button only if applicable */}
-                     {initialBase64Data && textContext && (
-                         <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate} disabled={isGenerating}>
-                             <Ionicons name="refresh" size={20} color={COLORS.white} />
-                             <Text style={styles.actionButtonText}>Regenerate</Text>
-                         </TouchableOpacity>
-                      )}
-                 </View>
-
                  {/* Manual Swipe Buttons */}
                  <View style={styles.manualSwipeContainer}>
-                     {/* Disable buttons based on canSwipe state and if cards exist (currentIndex >= 0) */}
-                     <TouchableOpacity style={styles.swipeButton} onPress={() => swiperRef.current?.swipeLeft()} disabled={!canSwipe || currentIndex < 0}>
-                         <Ionicons name="close-circle" size={60} color={!canSwipe || currentIndex < 0 ? COLORS.mediumGray : COLORS.errorRed} />
+                     <TouchableOpacity
+                       style={[styles.swipeButtonWrapper, (!canSwipe || currentIndex < 0) && styles.disabledButton]}
+                       onPress={() => swiperRef.current?.swipeLeft()}
+                       disabled={!canSwipe || currentIndex < 0}
+                      >
+                         <Ionicons name="close-circle" size={64} color={!canSwipe || currentIndex < 0 ? COLORS.mediumGray : COLORS.errorRed} />
                      </TouchableOpacity>
-                     <TouchableOpacity style={styles.swipeButton} onPress={() => swiperRef.current?.swipeRight()} disabled={!canSwipe || currentIndex < 0}>
-                         <Ionicons name="heart-circle" size={60} color={!canSwipe || currentIndex < 0 ? COLORS.mediumGray : COLORS.green} />
+                     <TouchableOpacity
+                        style={[styles.swipeButtonWrapper, (!canSwipe || currentIndex < 0) && styles.disabledButton]}
+                        onPress={() => swiperRef.current?.swipeRight()}
+                        disabled={!canSwipe || currentIndex < 0}
+                      >
+                         <Ionicons name="heart-circle" size={64} color={!canSwipe || currentIndex < 0 ? COLORS.mediumGray : COLORS.green} />
                      </TouchableOpacity>
                  </View>
+
+                 {/* Swipe Counter */}
+                 <Text style={styles.swipeCounterText}>{swipesLeftText}</Text>
+
+                 {/* Action Buttons (Regenerate / New Screenshot) - MOVED TO CENTERED MESSAGE AREA when swiped all */}
+                 {/* Kept simplified footer actions if needed */}
+                 {/* <View style={styles.footerButtonsContainer}> ... </View> */}
+
             </View>
         )}
 
@@ -607,16 +633,17 @@ export default function SwipesPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white, // Use white background like web
+    backgroundColor: COLORS.white, // Main background
+    justifyContent: 'space-between', // Push footer down
   },
-  centeredContainer: {
+  centeredContainer: { // Only for full-screen loading/error initially
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.white,
     padding: 20,
   },
-  // Loading Modal Styles
+  // Loading Modal Styles (Keep as is)
   loadingModalContainer: {
       flex: 1,
       justifyContent: 'center',
@@ -637,7 +664,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 15,
     fontSize: 16,
-    color: COLORS.textPrimary, // Darker text
+    color: COLORS.textPrimary,
   },
   errorText: {
     marginTop: 10,
@@ -646,44 +673,46 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-   infoText: { // Generic text for messages like 'No responses'
-      fontSize: 16,
+   infoText: { // Generic text for messages like 'No responses', 'Swiped All'
+      fontSize: 18,
       color: COLORS.textSecondary,
       textAlign: 'center',
-      marginBottom: 20,
+      marginBottom: 25,
+      fontWeight: '500',
   },
+  // Header
   headerContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 15,
-      paddingTop: 10, // Adjust as needed for status bar height
+      paddingTop: 10,
       paddingBottom: 5,
-      // backgroundColor: 'lightblue', // For layout debugging
+      // backgroundColor: 'lightblue', // Debug
   },
-  closeButton: {
-      padding: 5, // Increase tappable area
+  iconButton: { // Generic style for icon-only buttons
+      padding: 8, // Increase tappable area
   },
   savedButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: COLORS.lightGray,
-      paddingVertical: 5,
-      paddingHorizontal: 10,
-      borderRadius: 15,
+      backgroundColor: COLORS.lightPinkBackground, // Use light pink
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 20, // Pill shape
   },
   savedButtonText: {
-      marginLeft: 5,
-      fontSize: 12,
-      color: COLORS.darkGray,
-      fontWeight: '500',
+      marginLeft: 6,
+      fontSize: 13,
+      color: COLORS.primaryPink, // Match icon
+      fontWeight: '600',
   },
+  // Learning Bar
   learningBarContainer: {
       paddingHorizontal: 20,
-      paddingVertical: 10,
-      marginBottom: 10, // Space before swiper
+      paddingVertical: 12,
+      // marginBottom: 10, // Removed margin, handled by flex space
       backgroundColor: COLORS.white, // Match background
-      // Add subtle border/shadow if needed
       borderBottomWidth: 1,
       borderBottomColor: COLORS.lightGray,
   },
@@ -691,177 +720,212 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 5,
+      marginBottom: 6,
   },
   learningBarLabel: {
       flexDirection: 'row',
       alignItems: 'center',
   },
   learningBarText: {
-      marginLeft: 5,
-      fontSize: 11,
+      marginLeft: 6,
+      fontSize: 12, // Slightly larger
       fontWeight: '600',
       color: COLORS.textPrimary,
   },
   upgradeText: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 12, // Match
+      fontWeight: '700', // Bolder
       color: COLORS.primaryPink,
   },
   progressBarBackground: {
-      height: 6,
+      height: 8, // Thicker bar
       backgroundColor: COLORS.lightGray,
-      borderRadius: 3,
+      borderRadius: 4,
       overflow: 'hidden',
-      marginBottom: 5,
+      marginBottom: 6,
   },
   progressBarForeground: {
       height: '100%',
       backgroundColor: COLORS.mediumGray, // Default for non-premium
-      borderRadius: 3,
+      borderRadius: 4,
+      // Add transition if desired (React Native Animated)
   },
   premiumProgressBar: {
-       // TODO: Implement gradient if possible, otherwise solid color
-      backgroundColor: COLORS.primaryPink, // Or use a premium color
+      backgroundColor: COLORS.primaryPink, // Use primary pink for premium
+      // TODO: Add gradient using LinearGradient if needed
   },
   learningPercentageText: {
-      fontSize: 10,
+      fontSize: 11, // Slightly larger
       color: COLORS.darkGray,
       fontWeight: '500',
   },
    premiumPercentageText: {
-      color: COLORS.green, // Use green for premium learned text
+      color: COLORS.primaryPink, // Match premium color
+      fontWeight: '600',
    },
-  learningHintText: {
-      fontSize: 10,
-      color: COLORS.textSecondary,
+  // Swiper Area (Takes remaining space)
+  swiperContainer: {
+      flex: 1, // Allow swiper to take up available vertical space
+      alignItems: 'center', // Center Swiper horizontally
+      justifyContent: 'center', // Center Swiper vertically
+      // backgroundColor: 'lightcoral', // Debug
+      paddingHorizontal: 10, // Prevent card hitting edges
+      paddingVertical: 10, // Add some vertical padding
+      // Remove fixed paddingBottom, flex handles space
   },
-  card: { // Keep card styling simple
-    flex: 1,
-    borderRadius: 15,
+  swiperCardStyle: {
+      width: '95%', // Card takes most of the swiper width
+      height: '95%', // Card takes most of the swiper height
+      // Styles moved to .card
+  },
+  // Centered Message Area (When swiped all or no cards)
+  centeredMessageContainer: {
+      flex: 1, // Take up swiper's space
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+  },
+  centeredActionButtons: {
+      marginTop: 15,
+      alignItems: 'center',
+      width: '100%',
+  },
+  // Card Styling
+  card: {
+    flex: 1, // Fill the swiper card slot
+    borderRadius: 20, // More rounded corners
     borderWidth: 1,
     borderColor: COLORS.lightGray,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: COLORS.white,
-    padding: 20, // Reduced padding slightly
+    padding: 25, // Increase padding
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 }, // Slightly larger shadow
+    shadowOpacity: 0.1, // Softer shadow
+    shadowRadius: 8,
+    elevation: 5, // Android shadow
+    alignItems: 'center', // Center content horizontally
+    justifyContent: 'center', // Center content vertically
+  },
+  cardScrollContent: {
+    flexGrow: 1, // Ensure ScrollView content can grow
+    justifyContent: 'center', // Center text vertically within scroll
+    alignItems: 'center', // Center text horizontally
   },
   cardText: {
     textAlign: 'center',
-    fontSize: 18, // Slightly smaller text
-    lineHeight: 26,
+    fontSize: 20, // Larger text
+    lineHeight: 30, // Increased line height
     color: COLORS.textPrimary,
-    fontWeight: '500', // Medium weight
+    fontWeight: '500',
   },
-  swiperCardStyle: {
-      width: '85%', // Adjust width
-      height: '90%', // Adjust height relative to container
-      // Removed fixed height/width from here, handled by container
-  },
-   swiperContainer: {
-        flex: 1, // Take up remaining space
-        alignItems: 'center',
-        justifyContent: 'center',
-        // backgroundColor: 'lightcoral', // For layout debugging
-        paddingBottom: 180, // Ensure space for footer elements
-        marginTop: -20, // Pull swiper up slightly
-    },
+  // Overlay Label Styles
   overlayLabelContainer: {
-      // ... existing styles ...
-      borderRadius: 15,
+      width: 100,
+      height: 100,
+      borderRadius: 50, // Make it circular
+      justifyContent: 'center',
+      alignItems: 'center',
+      opacity: 0.8, // Slightly more transparent
   },
   overlayLabelLeft: {
-      backgroundColor: 'rgba(211, 47, 47, 0.6)', // Slightly less opaque red
+      backgroundColor: COLORS.errorRed,
+      // Removed border
   },
   overlayLabelRight: {
-      backgroundColor: 'rgba(76, 175, 80, 0.6)', // Slightly less opaque green
+      backgroundColor: COLORS.green,
+       // Removed border
   },
-  overlayLabelText: {
-      // ... existing styles ...
-      fontSize: 28,
-      padding: 10,
+  overlayLabelText: { // Kept if you want text instead of icons
+      color: COLORS.white,
+      fontSize: 24,
+      fontWeight: 'bold',
+      textAlign: 'center',
   },
+  // Footer
   footerContainer: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      paddingBottom: 20, // SafeAreaView might handle bottom padding
+      paddingTop: 10, // Add space above buttons
+      paddingBottom: 15, // Space from bottom edge (adjust if needed with SafeAreaView)
       paddingHorizontal: 20,
       alignItems: 'center',
       backgroundColor: COLORS.white, // Match background
-      // borderTopWidth: 1,
-      // borderTopColor: COLORS.lightGray,
+      borderTopWidth: 1, // Add subtle separator
+      borderTopColor: COLORS.lightGray,
   },
   swipeCounterText: {
-      fontSize: 12,
+      fontSize: 13,
       color: COLORS.textSecondary,
       fontWeight: '500',
-      marginBottom: 10,
-  },
-  footerButtonsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      width: '100%',
-      marginBottom: 15,
+      marginBottom: 10, // Space below counter, above buttons
+      marginTop: 5,
   },
   manualSwipeContainer: {
       flexDirection: 'row',
-      justifyContent: 'space-evenly',
-      width: '80%', // Limit width of swipe buttons
+      justifyContent: 'space-around', // Space out buttons
+      alignItems: 'center', // Align vertically
+      width: '70%', // Limit width to keep buttons closer
+      marginBottom: 5, // Space below swipe buttons before counter
   },
-  swipeButton: {
-     // Make sure tappable area is large enough
-     padding: 5,
+  swipeButtonWrapper: { // Wrapper for opacity/styling disabled state
+     // Add padding if icons feel too small to tap
+     padding: 8, // Increase tappable area
   },
-  actionButton: { // For Regenerate
+  disabledButton: {
+     opacity: 0.4, // Make disabled buttons look faded
+  },
+  // Action Buttons (General styles)
+  actionButton: { // Base style for solid buttons (Regenerate)
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      paddingVertical: 12, // Standard padding
+      paddingHorizontal: 25,
+      borderRadius: 30, // Fully rounded ends
+      minWidth: 160, // Ensure minimum width
+      marginVertical: 5, // Space between buttons if stacked
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 3,
+  },
+  regenerateButton: { // Specific styling for regenerate
       backgroundColor: COLORS.primaryPink,
-      paddingVertical: 10,
-      paddingHorizontal: 20,
-      borderRadius: 25,
-      minWidth: 140, // Ensure decent width
-      marginHorizontal: 5, // Add some spacing
   },
   actionButtonText: {
       color: COLORS.white,
-      fontSize: 14,
+      fontSize: 15, // Slightly larger text
       fontWeight: 'bold',
-      marginLeft: 8,
+      marginLeft: 10, // More space next to icon
   },
-  outlineButton: { // For New Screenshot and Go Back
+  outlineButton: { // Base style for outline buttons (New Screenshot, Back)
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: COLORS.white,
-      paddingVertical: 10,
-      paddingHorizontal: 20,
-      borderRadius: 25,
-      borderWidth: 1.5,
+      paddingVertical: 12, // Match actionButton
+      paddingHorizontal: 25, // Match actionButton
+      borderRadius: 30, // Match actionButton
+      borderWidth: 1.5, // Keep border
       borderColor: COLORS.primaryPink,
-      minWidth: 140, // Ensure decent width
-      marginHorizontal: 5, // Add some spacing
+      minWidth: 160, // Match actionButton
+      marginVertical: 5, // Match actionButton
+   },
+   newScreenshotButton: { // Specific styling if needed
+      // Inherits from outlineButton
    },
    outlineButtonText: {
       color: COLORS.primaryPink,
-      fontSize: 14,
+      fontSize: 15, // Match actionButtonText
       fontWeight: 'bold',
-      marginLeft: 8,
+      marginLeft: 10, // Match actionButtonText
    },
-   // Keep backButton styles for error screen compatibility
+   // Keep backButton styles for error screen compatibility (though outlineButton could replace it)
    backButton: {
         marginTop: 20,
-        backgroundColor: COLORS.primaryPink,
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 20,
+        backgroundColor: COLORS.primaryPink, // Or use outline style
+        paddingVertical: 12,
+        paddingHorizontal: 25,
+        borderRadius: 30,
      },
      backButtonText: {
         color: COLORS.white,
