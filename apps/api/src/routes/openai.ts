@@ -308,10 +308,10 @@ router.post('/analyze-chat', async (req, res) => {
     ];
 
     const response = await openai.chat.completions.create({
-      model: "o4-mini", // Use mini for this analysis task
+      model: "o4-mini", //smartest model for task
       messages: messages,
-      max_tokens: 500,
-      temperature: 0.8, // Adjusted temp based on user edits
+      max_completion_tokens: 500, // Use the correct parameter for this model
+      temperature: 1, // Adjusted temp based on user edits
       response_format: { type: "json_object" }
     });
 
