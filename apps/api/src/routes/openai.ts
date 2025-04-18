@@ -431,6 +431,8 @@ router.post('/analyze-chat', async (req, res) => {
        }
     }
 
+    // Log the actual analysis data being sent back
+    logger.info('Sending analysis results:', { analysisResults, requestId });
     logger.info(`Successfully generated chat analysis for ${analysisResults.length} messages`, { requestId });
     return res.json({ analysis: analysisResults, requestId });
 

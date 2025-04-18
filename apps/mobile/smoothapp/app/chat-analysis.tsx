@@ -265,11 +265,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
-    maxHeight: 350, // Limit height to prevent excessive scrolling NEED
-    overflow: 'hidden', // Hide overflow if content exceeds maxHeight
   },
-   analysisList: { // Use this if you want internal scrolling
-     flex: 1, // Allow the list to take available space within the container
+   analysisList: {
+     // flex: 1, // REMOVED: No longer needed as container height is not fixed
      // If you want the container itself to scroll with the page, remove maxHeight from analysisContainer
      // and let scrollViewContainer handle scrolling.
    },
