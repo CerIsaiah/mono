@@ -13,15 +13,18 @@ const COLORS = {
   textPrimary: '#333333',
   textSecondary: '#888888',
   grey: '#D3D3D3',
-  lightGrey: '#F5F5F5',
+  lightGrey: '#F0F0F0', // Slightly darker grey for left bubble
   errorRed: '#D9534F',
+  darkGreyText: '#333333', // Darker text for left bubble
 };
 
 // Add API base URL constant
 const API_BASE_URL = 'https://mono-production-8ef9.up.railway.app'; // Replace if needed
 
+// Interface updated to expect myMessage and theirResponse
 interface AnalysisResult {
-  message: string;
+  myMessage: string;
+  theirResponse: string;
   rating: string;
 }
 
@@ -68,8 +71,17 @@ export default function ChatAnalysisScreen() {
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
 
+      // Check for the new expected structure
       if (!data.analysis || !Array.isArray(data.analysis)) {
            throw new Error('Invalid analysis data received from server.');
+      }
+      // Add more specific validation for the items if needed
+      const isValidData = data.analysis.every((item: any) =>
+         item && typeof item.myMessage === 'string' && typeof item.theirResponse === 'string' && typeof item.rating === 'string'
+      );
+      if (!isValidData) {
+          console.error('Invalid item structure in analysis data:', data.analysis.find((item: any) => !item || typeof item.myMessage !== 'string' || typeof item.theirResponse !== 'string' || typeof item.rating !== 'string'));
+          throw new Error('Received analysis items with incorrect structure.');
       }
 
       setAnalysis(data.analysis);
@@ -90,7 +102,7 @@ export default function ChatAnalysisScreen() {
   const handleNextPress = () => {
      if (imageUri && selectedContext) {
         router.push({
-            pathname: '/swipes-page', // Navigate to swipes page
+            pathname: '/swipes-page',
             params: {
                 mode: 'image',
                 selectedMode: selectedContext,
@@ -103,12 +115,23 @@ export default function ChatAnalysisScreen() {
      }
   };
 
+  // Updated to render both messages and the rating
   const renderAnalysisItem = (item: AnalysisResult, index: number) => (
-    <View key={index} style={styles.analysisItem}>
-       <View style={styles.messageBubble}>
-           <Text style={styles.messageText}>{item.message}</Text>
-       </View>
-      <Text style={styles.ratingText}>{item.rating}</Text>
+    <View key={index} style={styles.analysisPairContainer}>
+      {/* My Message (Right Bubble) */}
+      <View style={styles.myMessageContainer}>
+        <View style={styles.myMessageBubble}>
+            <Text style={styles.myMessageText}>{item.myMessage}</Text>
+        </View>
+      </View>
+
+      {/* Their Response (Left Bubble) + Rating */}
+      <View style={styles.theirResponseContainer}>
+         <View style={styles.theirResponseBubble}>
+            <Text style={styles.theirResponseText}>{item.theirResponse}</Text>
+         </View>
+         <Text style={styles.ratingText}>{item.rating}</Text>
+      </View>
     </View>
   );
 
@@ -126,18 +149,13 @@ export default function ChatAnalysisScreen() {
             <View style={styles.headerNumberCircle}>
                 <Text style={styles.headerNumber}>3</Text>
             </View>
-            <Text style={styles.headerText}>Chat Analysis</Text>
+            <Text style={styles.headerText}>Response Analysis</Text>
             <Text style={styles.headerSubtitle}>(Context: {selectedContext.replace('_', ' ')})</Text>
         </View>
 
-        {/* Screenshot Display */}
-        {imageUri && (
-          <Image source={{ uri: imageUri }} style={styles.screenshotImage} resizeMode="contain" />
-        )}
-
-        {/* Analysis Section */}
+        {/* Analysis Section - MOVED BEFORE IMAGE */}
         <View style={styles.analysisContainer}>
-          <Text style={styles.analysisTitle}>Your Message Performance</Text>
+          <Text style={styles.analysisTitle}>Their Response Performance</Text>
           {isLoading ? (
             <ActivityIndicator size="large" color={COLORS.primaryPink} style={styles.loadingIndicator} />
           ) : error ? (
@@ -149,13 +167,22 @@ export default function ChatAnalysisScreen() {
               </TouchableOpacity>
             </View>
           ) : analysis.length === 0 ? (
-             <Text style={styles.noMessagesText}>No messages found for analysis on your side.</Text>
+             <Text style={styles.noMessagesText}>No response pairs found for analysis.</Text>
           ) : (
             <View style={styles.analysisList}>
               {analysis.map(renderAnalysisItem)}
             </View>
           )}
         </View>
+
+        {/* Screenshot Display - MOVED AFTER ANALYSIS */}
+        {imageUri && (
+          <View style={styles.screenshotContainer}>
+             <Text style={styles.screenshotLabel}>Your Chat Screenshot</Text>
+             <Image source={{ uri: imageUri }} style={styles.screenshotImage} resizeMode="contain" />
+          </View>
+        )}
+
       </ScrollView>
 
       {/* Next Button - Fixed at the bottom */}
@@ -163,9 +190,9 @@ export default function ChatAnalysisScreen() {
         <TouchableOpacity
           style={styles.nextButton}
           onPress={handleNextPress}
-          disabled={isLoading} // Disable while loading analysis initially
+          disabled={isLoading}
         >
-          <Text style={styles.nextButtonText}>Get New Responses</Text>
+          <Text style={styles.nextButtonText}>Get Response Ideas</Text>
            <Ionicons name="arrow-forward" size={20} color={COLORS.white} style={styles.nextIcon} />
         </TouchableOpacity>
       </View>
@@ -181,15 +208,15 @@ const styles = StyleSheet.create({
   },
   scrollViewContainer: {
     flexGrow: 1,
-    paddingTop: 60, // Space for back button
-    paddingBottom: 100, // Space for fixed footer
+    paddingTop: 80,
+    paddingBottom: 100,
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 15, // Slightly reduced horizontal padding
   },
   backButton: {
     position: 'absolute',
     top: 50,
-    left: 20,
+    left: 15, // Adjusted to match padding
     flexDirection: 'row',
     alignItems: 'center',
     padding: 8,
@@ -202,13 +229,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
    headerContainer: {
-    flexDirection: 'column', // Stack elements vertically
-    alignItems: 'center', // Center items horizontally
+    flexDirection: 'column',
+    alignItems: 'center',
     backgroundColor: COLORS.white,
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 15,
-    marginBottom: 20, // Space before image
+    marginBottom: 25,
     width: '100%',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -216,10 +243,10 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  headerContent: { // Group number and text
+  headerContent: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 5, // Space between title and subtitle
+      marginBottom: 5,
   },
   headerNumberCircle: {
     width: 30,
@@ -228,8 +255,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightPinkBackground,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    marginBottom: 8, // Space below circle when vertical
+    marginBottom: 8,
   },
   headerNumber: {
     fontSize: 16,
@@ -237,53 +263,45 @@ const styles = StyleSheet.create({
     color: COLORS.primaryPink,
   },
   headerText: {
-    fontSize: 20, // Larger title
+    fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
-    marginBottom: 4, // Space below title
+    marginBottom: 4,
   },
   headerSubtitle: {
       fontSize: 14,
       color: COLORS.textSecondary,
-      textTransform: 'capitalize', // Nicer formatting for context
-  },
-  screenshotImage: {
-    width: '100%',
-    aspectRatio: 9 / 16, // Adjust aspect ratio as needed, common for screenshots
-    borderRadius: 15,
-    marginBottom: 20,
-    backgroundColor: COLORS.lightGrey, // Placeholder bg
+      textTransform: 'capitalize',
   },
   analysisContainer: {
     width: '100%',
     backgroundColor: COLORS.white,
     borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 10, // Reduced padding for more space inside
+    marginBottom: 25,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
   },
-   analysisList: {
-     // flex: 1, // REMOVED: No longer needed as container height is not fixed
-     // If you want the container itself to scroll with the page, remove maxHeight from analysisContainer
-     // and let scrollViewContainer handle scrolling.
-   },
+  analysisList: {},
   analysisTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.textPrimary,
-    marginBottom: 15,
+    marginBottom: 20,
     textAlign: 'center',
   },
   loadingIndicator: {
     marginTop: 20,
+    paddingBottom: 20, // Ensure space when loading
   },
   errorContainer: {
     alignItems: 'center',
     paddingVertical: 20,
+    paddingHorizontal: 10,
   },
   errorText: {
     color: COLORS.errorRed,
@@ -309,47 +327,87 @@ const styles = StyleSheet.create({
      textAlign: 'center',
      paddingVertical: 20,
    },
-  analysisItem: {
-    marginBottom: 15,
-    alignItems: 'flex-end', // Align bubble and rating to the right
+  // Styles for the pair of messages
+  analysisPairContainer: {
+    marginBottom: 20, // Space between pairs
+    width: '100%',
   },
-   messageBubble: {
-     backgroundColor: COLORS.primaryPink,
-     paddingHorizontal: 15,
-     paddingVertical: 10,
-     borderRadius: 20,
-     borderBottomRightRadius: 5, // Typical chat bubble style
-     maxWidth: '80%', // Prevent bubble from being too wide
-     marginBottom: 5, // Space between bubble and rating
-   },
-  messageText: {
+  myMessageContainer: {
+    alignItems: 'flex-end', // Align bubble to the right
+    marginBottom: 8, // Space between my message and their response
+  },
+  myMessageBubble: {
+    backgroundColor: COLORS.primaryPink,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderBottomRightRadius: 5,
+    maxWidth: '85%',
+  },
+  myMessageText: {
     fontSize: 15,
     color: COLORS.white,
+  },
+  theirResponseContainer: {
+     alignItems: 'flex-start', // Align bubble and rating to the left
+  },
+  theirResponseBubble: {
+    backgroundColor: COLORS.lightGrey,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderBottomLeftRadius: 5,
+    maxWidth: '85%',
+    marginBottom: 5, // Space between bubble and rating
+  },
+  theirResponseText: {
+    fontSize: 15,
+    color: COLORS.darkGreyText,
   },
   ratingText: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.primaryPink, // Use pink for emphasis
+    color: COLORS.primaryPink,
     fontStyle: 'italic',
-     marginRight: 5, // Align rating slightly indented from bubble edge
+    marginLeft: 10, // Indent rating slightly from the left bubble
+    maxWidth: '85%', // Prevent rating text from overflowing strangely
+  },
+  screenshotContainer: {
+     width: '100%',
+     alignItems: 'center',
+     marginBottom: 20,
+     marginTop: 10, // Add some space above screenshot
+  },
+  screenshotLabel: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: COLORS.textSecondary,
+      marginBottom: 10,
+  },
+  screenshotImage: {
+    width: '100%',
+    aspectRatio: 9 / 16,
+    borderRadius: 15,
+    backgroundColor: COLORS.lightGrey,
   },
   footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
+    paddingVertical: 15, // Reduced padding
+    paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    backgroundColor: COLORS.lightPinkBackground, // Match screen background
+    backgroundColor: COLORS.lightPinkBackground,
   },
   nextButton: {
     backgroundColor: COLORS.black,
-    paddingVertical: 18,
+    paddingVertical: 16, // Slightly reduced padding
     borderRadius: 30,
     alignItems: 'center',
-    justifyContent: 'center', // Center text and icon
-    flexDirection: 'row', // Align icon and text horizontally
+    justifyContent: 'center',
+    flexDirection: 'row',
     width: '100%',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -363,6 +421,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
    nextIcon: {
-     marginLeft: 8, // Space between text and icon
+     marginLeft: 8,
    },
 });
