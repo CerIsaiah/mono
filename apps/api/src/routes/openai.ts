@@ -16,6 +16,8 @@ const openai = new OpenAI({
 // System prompts stored securely on the server
 const SYSTEM_PROMPTS = {
   'first-move': `"""
+  You are a dating coach. You are given a conversation between two people on a dating app.
+  Your job is to give the best response you can.
 
 Return EXACTLY 10 responses for flirty conversation continuation following these requirements:
 
@@ -86,7 +88,7 @@ INSTRUCTIONS###
    - [[...], [...],  [...],  [...],  [...],  [...],  [...],  [...], [...], [...]]
    - Avoid: forced continuations, aggression, dismissiveness
 
-STRATEGY EXAMPLES###
+#Examples
 User: "Buy me a drink"
 Improved Responses: [
   "Drinks on me if you beat me at pool",
@@ -201,7 +203,7 @@ router.post('/openai', async (req, res) => {
       userMessageContent = [
         {
           type: 'text',
-          text: `What should I say back. Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
+          text: `What should I say back? Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
         },
         {
           type: 'image_url',
@@ -223,7 +225,7 @@ router.post('/openai', async (req, res) => {
       model: 'ft:gpt-4o-2024-08-06:personal:usepickup-6:B6vmJdwR:ckpt-step-56', // Fine-tuned model
       temperature: 0.7,
       messages: [
-        { role: 'system', content: systemPromptContent },
+        { role: 'developer', content: systemPromptContent },
         { role: 'user', content: userMessageContent },
       ],
     });
