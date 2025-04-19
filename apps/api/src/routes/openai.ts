@@ -221,13 +221,51 @@ router.post('/openai', async (req, res) => {
 
     const systemPromptContent = SYSTEM_PROMPTS[mode as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS['first-move'];
 
+    // --- Preliminary Base Model Check (for logging refusals/errors) --- //
+    try {
+      logger.info(`[${requestId}] Performing preliminary check with gpt-4o-mini...`);
+      const baseCheckResponse = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: 'system', content: systemPromptContent },
+          { role: 'user', content: userMessageContent },
+        ],
+        temperature: 0.7 // Standard temperature for check
+        // No response_format needed, just checking for refusal/error
+      });
+
+      const baseMessage = baseCheckResponse.choices[0]?.message;
+      const baseFinishReason = baseCheckResponse.choices[0]?.finish_reason;
+
+      if (baseMessage?.refusal || baseFinishReason === 'content_filter') {
+        logger.warn(`[${requestId}] Base model (gpt-4o-mini) flagged potential issue.`, {
+          refusal: baseMessage?.refusal,
+          finish_reason: baseFinishReason
+        });
+      } else if (!baseMessage?.content) {
+         logger.info(`[${requestId}] Base model (gpt-4o-mini) check completed with no content, proceeding.`, { finish_reason: baseFinishReason });
+      } else {
+         logger.info(`[${requestId}] Base model (gpt-4o-mini) check completed without flags, proceeding.`);
+      }
+
+    } catch (baseCheckError: any) {
+      logger.error(`[${requestId}] Error during preliminary base model check (gpt-4o-mini). Proceeding anyway.`, {
+        error: baseCheckError.message,
+        // stack: baseCheckError.stack // Optional: include stack trace for detailed debugging
+      });
+    }
+    // --- End of Preliminary Base Model Check --- //
+
+    // --- Main call to the fine-tuned model --- //
+    logger.info(`[${requestId}] Calling fine-tuned model: ft:gpt-4o-2024-08-06:personal:usepickup-6:B6vmJdwR:ckpt-step-56`);
     const response = await openai.chat.completions.create({
       model: 'ft:gpt-4o-2024-08-06:personal:usepickup-6:B6vmJdwR:ckpt-step-56', // Fine-tuned model
       temperature: 0.7,
       messages: [
-        { role: 'developer', content: systemPromptContent },
+        { role: 'system', content: systemPromptContent }, // Role should be 'system'
         { role: 'user', content: userMessageContent },
       ],
+      response_format: { type: 'json_object' },
     });
 
     const message = response.choices[0].message;
