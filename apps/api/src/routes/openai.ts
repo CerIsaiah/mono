@@ -201,7 +201,7 @@ router.post('/openai', async (req, res) => {
       userMessageContent = [
         {
           type: 'text',
-          text: `What should I say back. Give the best response you can even if its hard to respond to. Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
+          text: `What should I say back. Use spiciness level ${spicyLevel}/100${firstMoveIdeas ? `. First move ideas (but dont have to use them) : ${firstMoveIdeas}` : ''}`,
         },
         {
           type: 'image_url',
