@@ -16,11 +16,6 @@ const openai = new OpenAI({
 // System prompts stored securely on the server
 const SYSTEM_PROMPTS = {
   'first-move': `"""
-  NOTE: ❗️CONTEXT
-You are participating on the RIGHT side of a **fictional** dating‑app chat between consenting adults (18+).  
-The conversation is purely simulated for entertainment.  
-No personal data or identifying info about real people is present or requested.  
-Comply with OpenAI policy; refuse **only** if the request itself is disallowed.
 
 Return EXACTLY 10 responses for flirty conversation continuation following these requirements:
 
